@@ -809,28 +809,63 @@ def exit_targets(slide):
             for c in slide._element.iter(bd.qn("p:cTn")) if c.get("presetClass") == "exit"]
 
 
-def test_exit_fades_out_on_the_next_click(tmp_path):
-    sl = mark_slide(tmp_path, [box(1, exit=True), box(2)], reveal="click")
-    n = by_name(sl)
-    b1, b2 = n["標註/Table 2/紅框1"], n["標註/Table 2/紅框2"]
-    clicks = [c for c in sl._element.iter(bd.qn("p:cTn")) if c.get("presetClass")]
-    assert [(c.get("presetClass"), c.get("nodeType")) for c in clicks] == [
-        ("entr", "clickEffect"), ("exit", "clickEffect"), ("entr", "withEffect")]
-    assert exit_targets(sl) == [b1.shape_id]
-    # the last mark leaving gets a click of its own
-    sl = mark_slide(tmp_path, [box(1), box(2, exit=True)], reveal="click")
-    n = by_name(sl)
-    assert exit_targets(sl) == [n["標註/Table 2/紅框2"].shape_id]
-    assert sum(1 for c in sl._element.iter(bd.qn("p:cTn")) if c.get("nodeType") == "clickEffect") == 3
+def effects(slide):
+    """[(presetClass, nodeType, spid, grpId)] in timeline order."""
+    out = []
+    for c in slide._element.iter(bd.qn("p:cTn")):
+        if c.get("presetClass"):
+            out.append((c.get("presetClass"), c.get("nodeType"), int(next(c.iter(bd.qn("p:spTgt"))).get("spid")),
+                        c.get("grpId")))
+    return out
 
 
-def test_exit_keyframes(tmp_path):
+def test_exit_then_summary_brings_every_mark_back(tmp_path):
+    sl = mark_slide(tmp_path, [box(1, exit=True), box(2, exit=True), box(3, exit=True)], reveal="click")
+    n = by_name(sl)
+    b1, b2, b3 = (n[f"標註/Table 2/紅框{k}"].shape_id for k in (1, 2, 3))
+    assert [(c, node, spid) for c, node, spid, _ in effects(sl)] == [
+        ("entr", "clickEffect", b1),
+        ("exit", "clickEffect", b1), ("entr", "withEffect", b2),
+        ("exit", "clickEffect", b2), ("entr", "withEffect", b3),
+        ("entr", "clickEffect", b1), ("entr", "withEffect", b2),  # final click: all call-outs back; b3 never left
+    ]
+    # a shape built three times (in, out, in) gets three distinct build ids
+    assert [g for c, _, spid, g in effects(sl) if spid == b1] == ["0", "1", "2"]
+    assert {(b.get("spid"), b.get("grpId")) for b in sl._element.iter(bd.qn("p:bldP"))} >= {
+        (str(b1), "0"), (str(b1), "1"), (str(b1), "2")}
+
+
+def test_summary_rides_on_the_conclusion_click_below_the_figure(tmp_path):
+    spec = mark_spec(tmp_path, [box(1, exit=True), box(2)], reveal="click")
+    spec["slides"][0]["conclusion"] = "兩種規模都最好"
+    out = tmp_path / "o.pptx"
+    bd.render(spec, tmp_path, "visual", "double", str(out))
+    sl = Presentation(str(out)).slides[1]
+    n = by_name(sl)
+    assert "結論遮罩" not in n  # no veil: the call-outs must stay readable
+    bar, pic = n["結論橫條"], picture(sl)
+    assert bar.top >= pic.top + pic.height  # under the annotated figure
+    b1, b2 = n["標註/Table 2/紅框1"].shape_id, n["標註/Table 2/紅框2"].shape_id
+    last_click = [e for e in effects(sl)][-2:]
+    assert [(c, node, spid) for c, node, spid, _ in last_click] == [
+        ("entr", "clickEffect", bar.shape_id), ("entr", "withEffect", b1)]
+
+
+def test_slides_without_marks_keep_the_centred_veil(tmp_path):
+    sl = build(tmp_path, bar_spec("結論"), "double")[1]
+    assert named(sl, "結論遮罩")
+    marked = mark_spec(tmp_path, [box(1)])
+    marked["slides"][0].update(conclusion="結論", conclusion_pos="center")  # explicit choice still wins
+    assert named(build(tmp_path, marked, "double")[1], "結論遮罩")
+
+
+def test_exit_keyframes_end_on_the_summary(tmp_path):
     spec = mark_spec(tmp_path, [box(1, exit=True), box(2)], reveal="click")
     out = tmp_path / "kf.pptx"
     bd.render(spec, tmp_path, "visual", "double", str(out), keyframes=True)
     frames = list(Presentation(str(out)).slides)[1:]
     has = lambda f, k: any(sh.name == f"標註/Table 2/紅框{k}" for sh in flat_shapes(f.shapes))
-    assert [(has(f, 1), has(f, 2)) for f in frames] == [(False, False), (True, False), (False, True)]
+    assert [(has(f, 1), has(f, 2)) for f in frames] == [(False, False), (True, False), (False, True), (True, True)]
 
 
 def test_exit_without_reveal_warns(tmp_path):

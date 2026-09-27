@@ -119,6 +119,8 @@ class Deck:
         self.page = len(self.prs.slides)
         self.steps = []  # click steps on this slide: [{"in": [ids], "out": [ids]}, ...]
         self.pending_out = []  # shapes that fade out on the next click (marks with "exit": true)
+        self.exited = []  # mark shapes that have faded out; the final click brings them back
+        self.summarised = False
         self.mark_units = 0
         return sl
 
@@ -128,6 +130,7 @@ class Deck:
             self.steps[-1]["in"].extend(ids)
             return
         self.steps.append({"in": list(ids), "out": self.pending_out})
+        self.exited += self.pending_out
         self.pending_out = []
 
     # ------------------------------------------------------------ marks & colour usage
@@ -587,8 +590,14 @@ class Deck:
                         rr.font.color.rgb = self.rgb(f"concept{self.concepts[concept]}_fg")
 
     def conclusion_pos(self, d, label=None):
-        pos = d.get("conclusion_pos") or self.spec.get("style", {}).get("conclusion_pos", "center")
-        if pos not in ("center", "bottom"):
+        """center: veil + bar in the middle; bottom: veil + bar at the bottom (space reserved);
+        below: no veil, bar under the content (space reserved) — the default on slides with screenshot marks,
+        whose call-outs must stay readable in the final summary state."""
+        pos = d.get("conclusion_pos")
+        if not pos and has_marks(d) and not d.get("_focus_seq"):
+            pos = "below"
+        pos = pos or self.spec.get("style", {}).get("conclusion_pos", "center")
+        if pos not in ("center", "bottom", "below"):
             if label:
                 WARN.append(f"[{label}] unknown conclusion_pos '{pos}' — using 'center'")
             pos = "center"
@@ -608,16 +617,19 @@ class Deck:
         if kind in ("problem", "solution"):
             self.use(kind, text)
         x, w, top = 0.6, W - 1.2, self.body_top - 0.15
-        if self.conclusion_pos(d, label) == "bottom":
+        pos = self.conclusion_pos(d, label)
+        veil = None
+        if pos in ("bottom", "below"):
             y = H - 0.5 - BAR_H
             veil_h = y - top
         else:
             veil_h = H - 0.5 - top
             y = top + (veil_h - BAR_H) / 2
-        veil = self.shape(s, MSO_SHAPE.RECTANGLE, x, top, w, veil_h, fill="FFFFFF")
-        veil.name = "結論遮罩"
-        clr = veil.fill._xPr.find(qn("a:solidFill")).find(qn("a:srgbClr"))
-        etree.SubElement(clr, qn("a:alpha")).set("val", str(VEIL_ALPHA * 1000))
+        if pos != "below":
+            veil = self.shape(s, MSO_SHAPE.RECTANGLE, x, top, w, veil_h, fill="FFFFFF")
+            veil.name = "結論遮罩"
+            clr = veil.fill._xPr.find(qn("a:solidFill")).find(qn("a:srgbClr"))
+            etree.SubElement(clr, qn("a:alpha")).set("val", str(VEIL_ALPHA * 1000))
 
         size = 20
         while size > 14 and text_w(text, size) > w - 0.6:
@@ -635,7 +647,11 @@ class Deck:
         r = p.add_run()
         r.text = text
         self.style(r, size, "FFFFFF", bold=True)
-        self.add_step([veil.shape_id, bar.shape_id])
+        # the summary click: the banner arrives with every call-out that was walked through and put away
+        self.pending_out = []
+        ids = ([veil.shape_id] if veil is not None else []) + [bar.shape_id]
+        self.add_step(ids + list(self.exited))
+        self.summarised = True
 
     def key_point(self, s, x, y, w, h, text):
         self.shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h, fill="tint", radius=0.12)
@@ -696,7 +712,7 @@ class Deck:
         self.nav(s, d.get("chapter"), d.get("section"))
         self.heading(s, d)
         x, y, w, h = self.body()
-        if d.get("conclusion") and self.conclusion_pos(d) == "bottom":
+        if d.get("conclusion") and self.conclusion_pos(d) in ("bottom", "below"):
             h -= BAR_H + 0.15  # reserved on the 'before' keyframe too, so nothing jumps between frames
         key = dens["key"]
         txt = pick_text(d, key)
@@ -832,7 +848,7 @@ class Deck:
         self.heading(s, d)
         top = self.body_top
         bottom = H - 0.6
-        if d.get("conclusion") and self.conclusion_pos(d) == "bottom":
+        if d.get("conclusion") and self.conclusion_pos(d) in ("bottom", "below"):
             bottom = H - 0.5 - BAR_H - 0.2
         DiagramLayout(self, s, spec, d, label).draw(MARGIN, top, W - 2 * MARGIN, bottom - top)
         if d.get("conclusion"):
@@ -860,7 +876,7 @@ class Deck:
         ncol = y1 - y0 + 1
 
         bottom = H - 0.6 - 0.55  # leave room for the year axis
-        if d.get("conclusion") and self.conclusion_pos(d) == "bottom":
+        if d.get("conclusion") and self.conclusion_pos(d) in ("bottom", "below"):
             bottom -= BAR_H + 0.2
         top = self.body_top
         lab_w = max([label_w(self.plain(n)) + 0.45 for n in names if n] + [0]) if any(names) else 0
@@ -1028,9 +1044,12 @@ class Deck:
         if steps and self.keyframes:
             # one slide per click: frame k shows what is visible after k clicks (the slide is rebuilt identically)
             def hidden_after(k):
-                later_in = [i for st in steps[k:] for i in st["in"]]
-                gone = [i for st in steps[:k] for i in st["out"]]
-                return later_in + gone
+                animated = {i for st in steps for i in st["in"]}
+                visible = set()
+                for st in steps[:k]:
+                    visible |= set(st["in"])
+                    visible -= set(st["out"])
+                return list(animated - visible)
             drop_shapes(self.prs.slides[-1], hidden_after(0))
             self.page_number(self.prs.slides[-1])
             for k in range(1, len(steps) + 1):
@@ -1046,10 +1065,12 @@ class Deck:
         self.in_focus_seq = False
 
     def close_steps(self):
-        """A mark that should disappear after the last click gets one more click of its own."""
-        if self.pending_out:
-            self.steps.append({"in": [], "out": self.pending_out})
-            self.pending_out = []
+        """End of the slide: the last mark simply stays, and every mark that left comes back on one final
+        click, so the slide ends showing all its call-outs (the summary state)."""
+        self.pending_out = []
+        if self.exited and not self.summarised:
+            self.steps.append({"in": list(self.exited), "out": []})
+            self.summarised = True
 
 
     def color_table(self):
@@ -1454,6 +1475,10 @@ def mark_geometry(m):
     return fx, fy, fw, fh
 
 
+def has_marks(d):
+    return any(isinstance(f, dict) and f.get("marks") for f in d.get("figs", []) or [])
+
+
 def set_alpha(sh, pct):
     """Opacity (0-100) of a shape's solid fill."""
     clr = sh.fill._xPr.find(qn("a:solidFill")).find(qn("a:srgbClr"))
@@ -1507,6 +1532,8 @@ def click_steps(slide, steps):
         return e
 
     ids = iter(range(1, 10000))
+    builds = {}  # spid -> number of builds so far (grpId)
+    bld_pairs = []
     timing = el(slide._element, "timing")
     root = el(el(el(timing, "tnLst"), "par"), "cTn", id=next(ids), dur="indefinite", restart="never",
               nodeType="tmRoot")
@@ -1524,9 +1551,12 @@ def click_steps(slide, steps):
         for kind, shape_ids in (("out", stp.get("out", [])), ("in", stp.get("in", []))):
             for spid in shape_ids:
                 entr = kind == "in"
+                grp = builds.get(spid, 0)
+                builds[spid] = grp + 1
+                bld_pairs.append((spid, grp))
                 eff = el(el(effects, "par"), "cTn", id=next(ids), presetID="10",
                          presetClass="entr" if entr else "exit", presetSubtype="0", fill="hold",
-                         grpId="0" if entr else "1", nodeType="clickEffect" if k == 0 else "withEffect")
+                         grpId=str(grp), nodeType="clickEffect" if k == 0 else "withEffect")
                 k += 1
                 el(el(eff, "stCondLst"), "cond", delay="0")
                 beh = el(eff, "childTnLst")
@@ -1554,11 +1584,9 @@ def click_steps(slide, steps):
     # build entries only for text-capable shapes (p:sp), as PowerPoint writes them
     sp_ids = {sh.shape_id for sh in slide.shapes if sh._element.tag == qn("p:sp")}
     bld = el(timing, "bldLst")
-    for kind, grp in (("in", "0"), ("out", "1")):
-        for stp in steps:
-            for spid in stp.get(kind, []):
-                if spid in sp_ids:
-                    el(bld, "bldP", spid=spid, grpId=grp, animBg="1")
+    for spid, grp in bld_pairs:
+        if spid in sp_ids:
+            el(bld, "bldP", spid=spid, grpId=str(grp), animBg="1")
 
 
 def text_w(t, size):
