@@ -19,7 +19,8 @@
 {
   "style":    {"nav": "single", "density": "balanced"},
   "chapters": [{"name": "問題背景", "sections": ["資料限制", "既有方法"]}, "..."],
-  "cover":    {"title": "…", "subtitle": "…", "byline": "報告人．Lab Meeting 論文報告", "date": "2026 / 10 / 02"},
+  "cover":    {"title": "…", "subtitle": "…", "byline": "報告人．Lab Meeting 論文報告", "date": "2026 / 10 / 02",
+               "venue": "IJCAI 2018", "paper_title": "…", "authors": ["…"], "affiliations": ["…"], "presenter": "〇〇〇"},
   "theme":    {"colors": {}, "fonts": {}},
   "slides":   [ ... ]
 }
@@ -28,7 +29,21 @@
 - `style.nav`：`single`（一排章節分頁）或 `double`（章節＋子章節兩排）。指令列 `--nav` 可覆寫。
 - `style.density`：`text` / `balanced` / `visual`，整份簡報的預設密度。`--density` 可覆寫，單頁也可用 `density` 覆寫。
 - `chapters`：導覽列的分頁，順序即顯示順序。可寫字串或 `{name, sections}`；`double` 模式需要 `sections`。
-- 封面不顯示導覽列。
+- 封面不顯示導覽列，見下方「封面」。
+
+### 封面
+
+`cover.style` 決定封面樣式；沒寫就依導覽列決定（`single` → `centered`、`double` → `paper`）。
+兩種樣式用到的欄位都寫上，切換導覽列時封面就不必重寫。
+
+| 樣式 | 版面 | 使用欄位 |
+|---|---|---|
+| `centered` | 標題置中 → 橘線 → `subtitle`、`byline`（作者．用途）、`date` | `title` `subtitle` `byline` `date` |
+| `paper` | 靠左：會議名稱藍色徽章 → 襯線粗體論文標題 → 橘線 → 作者、機構分兩欄 → 左下日期、右下「報告者：〇〇〇」 | `venue` `paper_title` `authors` `affiliations` `presenter` `date` |
+
+- `paper` 樣式沒有 `paper_title` 時用 `title`；沒有 `authors` 時，左欄改放 `byline`。
+- 作者、機構使用 `Times New Roman`；中文仍為微軟正黑體。
+- 報告者姓名不知道時寫「〇〇〇」，不要自己編。
 
 ## 2. 導覽列與章節
 

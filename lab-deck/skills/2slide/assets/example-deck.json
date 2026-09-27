@@ -40,7 +40,19 @@
     "title": "只看人口快照，能推回人怎麼流動嗎？",
     "subtitle": "A Fast and Accurate Method for Estimating People Flow from Spatiotemporal Population Data — IJCAI 2018",
     "byline": "報告人．Lab Meeting 論文報告",
-    "date": "2026 / 10 / 02"
+    "date": "2026 / 10 / 02",
+    "venue": "IJCAI 2018",
+    "paper_title": "A Fast and Accurate Method for Estimating People Flow from Spatiotemporal Population Data",
+    "authors": [
+      "Yasunori Akagi",
+      "Takuya Nishimura",
+      "Takeshi Kurashima",
+      "Hiroyuki Toda"
+    ],
+    "affiliations": [
+      "NTT Service Evolution Laboratories, NTT Corporation"
+    ],
+    "presenter": "〇〇〇"
   },
   "slides": [
     {

@@ -326,7 +326,16 @@ class Deck:
 
     # ------------------------------------------------------------ slide kinds
     def s_cover(self, d):
+        style = d.get("style") or ("paper" if self.nav_style == "double" else "centered")
+        if style not in ("centered", "paper"):
+            WARN.append(f"[cover] unknown cover.style '{style}' — using 'centered'")
+            style = "centered"
         s = self.slide()
+        (self.cover_paper if style == "paper" else self.cover_centered)(s, d)
+        self.notes(s, d.get("notes"))
+
+    def cover_centered(self, s, d):
+        """Single-nav cover: centred title, orange rule, then 作者．用途."""
         self.textbox(s, 1.2, 1.9, W - 2.4, 1.5, d.get("title", ""), size=38, color="dark", bold=True,
                      align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.BOTTOM, min_size=28, label="cover")
         self.line(s, 3.2, 3.6, W - 3.2, 3.6)
@@ -335,7 +344,28 @@ class Deck:
             if d.get(key):
                 self.textbox(s, 1.2, y, W - 2.4, 0.5, d[key], size=size, color=color, align=PP_ALIGN.CENTER)
                 y += 0.55
-        self.notes(s, d.get("notes"))
+
+    def cover_paper(self, s, d):
+        """Double-nav cover: venue badge, serif paper title, orange rule, authors | affiliations, presenter."""
+        x, w = MARGIN, W - 2 * MARGIN
+        if d.get("venue"):
+            self.pill(s, x, 1.35, text_w(d["venue"], 14) + 0.5, 0.42, d["venue"], "active", size=14)
+        self.textbox(s, x, 1.95, w, 1.65, d.get("paper_title") or d.get("title", ""), size=34, color="dark",
+                     bold=True, anchor=MSO_ANCHOR.BOTTOM, latin=self.F["ref_latin"], min_size=24,
+                     label="cover")
+        self.line(s, x, 3.8, W - MARGIN, 3.8)
+        # no author list (e.g. a progress report) -> fall back to the byline so the cover is not empty
+        cols = [(as_list(d.get("authors") or d.get("byline")), "dark"), (as_list(d.get("affiliations")), "muted")]
+        cw = (w - 0.5) / 2
+        for k, (items, color) in enumerate(cols):
+            if items:
+                self.textbox(s, x + k * (cw + 0.5), 4.05, cw, 1.8, items, size=16, color=color, space=4,
+                             latin=self.F["ref_latin"], min_size=12, label="cover")
+        if d.get("presenter"):
+            self.textbox(s, W - MARGIN - 5, H - 1.05, 5, 0.45, f"報告者：{d['presenter']}", size=17,
+                         color="text", align=PP_ALIGN.RIGHT, anchor=MSO_ANCHOR.MIDDLE)
+        if d.get("date"):
+            self.textbox(s, x, H - 1.05, 4, 0.45, d["date"], size=14, color="muted", anchor=MSO_ANCHOR.MIDDLE)
 
     def s_content(self, d, label):
         dens = DENSITIES[d.get("density", self.density)]

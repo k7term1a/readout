@@ -110,3 +110,46 @@ def test_divider_is_rejected(tmp_path):
 def test_no_shadow_on_rules(tmp_path):
     for c in (sh for sh in build(tmp_path, DOUBLE_SPEC, "double")[1].shapes if isinstance(sh, Connector)):
         assert c._element.spPr.find(bd.qn("a:effectLst")) is not None
+
+
+COVER = {"title": "中文標題", "byline": "報告人．用途", "venue": "NeurIPS 2022", "paper_title": "Paper Title",
+         "authors": ["A. Author", "B. Author"], "affiliations": ["Some University"], "presenter": "王小明"}
+
+
+def cover_of(tmp_path, nav, **cover):
+    spec = {"chapters": ["甲"], "cover": {**COVER, **cover}, "slides": []}
+    return texts(build(tmp_path, spec, nav)[0])
+
+
+def test_cover_default_follows_nav(tmp_path):
+    single = cover_of(tmp_path, "single")
+    assert "中文標題" in single and "報告人．用途" in single and "NeurIPS 2022" not in single
+    double = cover_of(tmp_path, "double")
+    assert {"NeurIPS 2022", "Paper Title", "報告者：王小明"} <= set(double) and "中文標題" not in double
+
+
+def test_cover_style_overrides_nav(tmp_path):
+    assert "NeurIPS 2022" in cover_of(tmp_path, "single", style="paper")
+    assert "中文標題" in cover_of(tmp_path, "double", style="centered")
+
+
+def test_paper_cover_layout(tmp_path):
+    t = cover_of(tmp_path, "double")
+    badge, title = t["NeurIPS 2022"], t["Paper Title"]
+    assert str(badge.fill.fore_color.rgb) == C["active"] and badge.top < title.top
+    assert title.text_frame.paragraphs[0].runs[0].font.name == bd.DEFAULT_THEME["fonts"]["ref_latin"]
+    authors, affil = t["A. Author\nB. Author"], t["Some University"]
+    assert authors.top == affil.top and authors.left < affil.left  # two columns
+    pres = t["報告者：王小明"]
+    assert pres.left > bd.Inches(bd.W / 2) and pres.top > authors.top  # bottom-right
+    assert "中文標題" in cover_of(tmp_path, "double", paper_title=None)
+
+
+def test_unknown_cover_style_warns(tmp_path):
+    cover_of(tmp_path, "double", style="fancy")
+    assert any("cover.style" in w for w in bd.WARN)
+
+
+def test_paper_cover_falls_back_to_byline(tmp_path):
+    t = cover_of(tmp_path, "double", authors=None, paper_title=None)
+    assert "中文標題" in t and "報告人．用途" in t

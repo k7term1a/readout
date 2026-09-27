@@ -66,7 +66,8 @@
 
 | paper.json | 用途 |
 |---|---|
-| `meta.title` / `venue` / `year` | 封面 `subtitle` 與 refs 第一筆 |
+| `meta.title` / `venue` / `year` | 封面 `paper_title`、`venue`、`subtitle` 與 refs 第一筆 |
+| `meta.authors` | 封面 `authors`（機構 `affiliations` 需從 PDF 首頁取得；沒有就省略） |
 | `summary.problem_gap` + `fishbone.causes` | 問題背景的紅色標籤（每個 cause 類別可當一個問題） |
 | `summary.contributions` | 方法提案的綠色標籤，並與問題配成 mapping |
 | `summary.one_line` | 封面標題或方法頁的 `one_line` |
