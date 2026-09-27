@@ -164,8 +164,8 @@ def bar_spec(conclusion, **extra):
 
 @pytest.mark.parametrize("nav", ["single", "double"])
 @pytest.mark.parametrize("density", list(bd.DENSITIES))
-def test_conclusion_bar(tmp_path, nav, density):
-    slide = build(tmp_path, bar_spec("既有方法算不動"), nav, density)[1]
+def test_conclusion_bar_bottom_reserves_space(tmp_path, nav, density):
+    slide = build(tmp_path, bar_spec("既有方法算不動", conclusion_pos="bottom"), nav, density)[1]
     bar = texts(slide)["既有方法算不動"]
     assert bar.name == "結論橫條" and str(bar.fill.fore_color.rgb) == C["problem"]
     assert str(bar.text_frame.paragraphs[0].runs[0].font.color.rgb) == "FFFFFF"
@@ -211,7 +211,7 @@ def test_conclusion_fades_in_on_one_click_with_veil(tmp_path):
     # translucent white veil from under the heading down to the bar, drawn above the content
     alpha = veil.fill._xPr.find(bd.qn("a:solidFill"))[0].find(bd.qn("a:alpha"))
     assert str(veil.fill.fore_color.rgb) == "FFFFFF" and int(alpha.get("val")) == bd.VEIL_ALPHA * 1000
-    assert veil.top + veil.height == bar.top and veil.left == bar.left and veil.width == bar.width
+    assert veil.left == bar.left and veil.width == bar.width
     title = texts(slide)["標題"]
     assert veil.top >= title.top + title.height
     # z-order: veil above every content shape, bar above the veil (only the page number may come later)
@@ -236,3 +236,45 @@ def test_keyframes_split_into_before_and_after(tmp_path):
     geom = lambda sl: [(sh.left, sh.top, sh.width, sh.height) for sh in sl.shapes
                        if sh.name not in ("結論橫條", "結論遮罩") and not slidenum_fields_in(sh)]
     assert geom(before) == geom(after)
+
+
+def near(a, b):
+    return abs(a - b) <= 2  # EMU rounding
+
+
+def content_geometry(slide):
+    return [(sh.left, sh.top, sh.width, sh.height) for sh in slide.shapes
+            if sh.name not in ("結論橫條", "結論遮罩") and not slidenum_fields_in(sh)]
+
+
+@pytest.mark.parametrize("nav", ["single", "double"])
+@pytest.mark.parametrize("density", list(bd.DENSITIES))
+def test_conclusion_centered_in_veil_by_default(tmp_path, nav, density):
+    slide = build(tmp_path, bar_spec("結論"), nav, density)[1]
+    (veil,), (bar,) = named(slide, "結論遮罩"), named(slide, "結論橫條")
+    assert abs((veil.top + veil.height / 2) - (bar.top + bar.height / 2)) <= 1  # vertically centred
+    assert near(veil.top + veil.height, bd.Inches(bd.H - 0.5))  # veil covers the whole body
+    # no space reserved: content is laid out exactly as without a conclusion
+    plain = build(tmp_path, bar_spec(None), nav, density)[1]
+    assert content_geometry(slide) == content_geometry(plain)
+
+
+def test_conclusion_pos_bottom_veil_stops_at_bar(tmp_path):
+    slide = build(tmp_path, bar_spec("結論", conclusion_pos="bottom"), "double")[1]
+    (veil,), (bar,) = named(slide, "結論遮罩"), named(slide, "結論橫條")
+    assert veil.top + veil.height == bar.top and bar.top + bar.height == bd.Inches(bd.H - 0.5)
+
+
+def test_conclusion_pos_deck_default_and_override(tmp_path):
+    spec = bar_spec("結論")
+    spec["style"] = {"conclusion_pos": "bottom"}
+    (bar,) = named(build(tmp_path, spec, "double")[1], "結論橫條")
+    assert near(bar.top + bar.height, bd.Inches(bd.H - 0.5))
+    spec["slides"][0]["conclusion_pos"] = "center"
+    (veil,) = named(build(tmp_path, spec, "double")[1], "結論遮罩")
+    assert near(veil.top + veil.height, bd.Inches(bd.H - 0.5))
+
+
+def test_unknown_conclusion_pos_warns(tmp_path):
+    build(tmp_path, bar_spec("結論", conclusion_pos="top"), "double")
+    assert any("conclusion_pos" in w for w in bd.WARN)

@@ -318,18 +318,33 @@ class Deck:
                 col = "FFFFFF" if r == 0 else ("todo" if "待填" in str(val) else "dark")
                 self.style(rr, size, col, bold=r == 0)
 
-    def conclusion(self, s, d, label):
-        """Conclusion bar at the bottom plus a translucent white veil over the content under the heading.
+    def conclusion_pos(self, d, label=None):
+        pos = d.get("conclusion_pos") or self.spec.get("style", {}).get("conclusion_pos", "center")
+        if pos not in ("center", "bottom"):
+            if label:
+                WARN.append(f"[{label}] unknown conclusion_pos '{pos}' — using 'center'")
+            pos = "center"
+        return pos
 
+    def conclusion(self, s, d, label):
+        """Translucent white veil over the content under the heading, plus a full-width conclusion bar.
+
+        pos 'center': the veil covers the whole body and the bar sits in its middle (no space reserved).
+        pos 'bottom': space is reserved under the content; the veil stops at the bar at the bottom.
         Both fade in together on one click, unless building keyframes (then this slide is the 'after' frame).
         """
         text, kind = d["conclusion"], d.get("conclusion_kind", "problem")
         if kind not in ("problem", "solution", "neutral"):
             WARN.append(f"[{label}] unknown conclusion_kind '{kind}' — using 'problem'")
             kind = "problem"
-        x, w, y = 0.6, W - 1.2, H - 0.5 - BAR_H
-        top = self.body_top - 0.15
-        veil = self.shape(s, MSO_SHAPE.RECTANGLE, x, top, w, y - top, fill="FFFFFF")
+        x, w, top = 0.6, W - 1.2, self.body_top - 0.15
+        if self.conclusion_pos(d, label) == "bottom":
+            y = H - 0.5 - BAR_H
+            veil_h = y - top
+        else:
+            veil_h = H - 0.5 - top
+            y = top + (veil_h - BAR_H) / 2
+        veil = self.shape(s, MSO_SHAPE.RECTANGLE, x, top, w, veil_h, fill="FFFFFF")
         veil.name = "結論遮罩"
         clr = veil.fill._xPr.find(qn("a:solidFill")).find(qn("a:srgbClr"))
         etree.SubElement(clr, qn("a:alpha")).set("val", str(VEIL_ALPHA * 1000))
@@ -412,7 +427,7 @@ class Deck:
         self.nav(s, d.get("chapter"), d.get("section"))
         self.heading(s, d)
         x, y, w, h = self.body()
-        if d.get("conclusion"):
+        if d.get("conclusion") and self.conclusion_pos(d) == "bottom":
             h -= BAR_H + 0.15  # reserved on the 'before' keyframe too, so nothing jumps between frames
         key = dens["key"]
         txt = pick_text(d, key)

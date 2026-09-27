@@ -17,7 +17,7 @@
 
 ```json
 {
-  "style":    {"nav": "single", "density": "balanced"},
+  "style":    {"nav": "single", "density": "balanced", "conclusion_pos": "center"},
   "chapters": [{"name": "問題背景", "sections": ["資料限制", "既有方法"]}, "..."],
   "cover":    {"title": "…", "subtitle": "…", "byline": "報告人．Lab Meeting 論文報告", "date": "2026 / 10 / 02",
                "venue": "IJCAI 2018", "paper_title": "…", "authors": ["…"], "affiliations": ["…"], "presenter": "〇〇〇"},
@@ -70,6 +70,7 @@
   "notes":    ["講者備註（選填）"],
   "conclusion": "頁面底部的結論橫條（選填）",
   "conclusion_kind": "problem",
+  "conclusion_pos": "center",
   "callout":  "頁底小字，例如資料來源（選填）",
   "density":  "visual",
   "text_ratio": 0.45
@@ -90,11 +91,15 @@
 | `balanced` | `short`（條列） | 文字欄約 38%，圖在右 | `notes`，沒有就自動放 `full` |
 | `visual` | `one_line` | 一句話＋滿版圖；沒有圖就變成置中大字的宣言頁 | `notes`，沒有就自動放 `full` |
 
-- `conclusion`：頁面底部的全寬白字橫條，寫這一頁要點出的結論（一句話，約 30 字以內）。
+- `conclusion`：全寬白字的結論橫條，寫這一頁要點出的結論（一句話，約 30 字以內）。
   - **點一下才出現**：標題以下的內容被半透明白色方框（「結論遮罩」，不透明度 70%）蓋住淡化，同時淡入橫條（「結論橫條」），
     兩者都是 0.5 秒淡入。報告時先講內容，講完點一下再帶出結論。
   - `conclusion_kind`：橫條顏色，`problem`（紅，預設）、`solution`（綠）、`neutral`（藍）。
-  - 三種密度、兩種導覽列都會顯示；內容區會自動縮短，不會和橫條重疊。文字太長時會縮小字級，縮到 14pt 仍放不下就發出警告。
+  - `conclusion_pos`：橫條位置。
+    - `center`（預設）：不預留空間，內容照常排滿；方框蓋住標題以下整個內容區，橫條置中在方框中間。
+    - `bottom`：在內容下方預留一條空間，橫條放在頁面底部，方框只蓋到橫條上緣。內容較少、底下本來就有空白時使用。
+    - 可以在頂層 `style.conclusion_pos` 設定整份的預設，單頁再用 `conclusion_pos` 覆寫。
+  - 三種密度、兩種導覽列都會顯示。文字太長時會縮小字級，縮到 14pt 仍放不下就發出警告。
   - 雙排風格用它來呈現問題；這些問題最後要在「研究動機」彙整成 `mapping` 對照頁。
   - 不能用動畫的場合（匯出 PDF、上傳 Google 簡報），建置時加 `--keyframes`：每個有結論的頁面拆成前後兩頁
     （沒有橫條／有遮罩與橫條），內容位置完全相同，翻頁時就像動畫。
