@@ -29,6 +29,11 @@ MARGIN = 0.9
 BAR_H = 0.62  # conclusion bar
 VEIL_ALPHA = 70  # % opacity of the white veil that fades the content when the conclusion bar appears
 BAND_ALPHA = 45  # % opacity of a concept band laid over a screenshot
+FADE_ALPHA = 30  # % opacity left on parts that are out of focus (style.md: ~70% transparent)
+FADE_TEXT = "C0C0C0"
+MAX_CLICKS = 3  # more click animations than this on one slide get hard to edit by hand
+FOCUS_KEYS = ("title", "subtitle", "tag", "kind", "one_line", "short", "full", "notes",
+              "conclusion", "conclusion_kind", "conclusion_pos")
 NOTE_SIDES = ("right", "left", "top", "bottom", "inside")
 
 DEFAULT_THEME = {
@@ -85,6 +90,8 @@ class Deck:
         self.uses = {}
         self.page = 0
         self.steps = []
+        self.focus = None  # id lit on the current focus page (None = nothing faded)
+        self.focus_hit = False
         self.prs = Presentation()
         self.prs.slide_width, self.prs.slide_height = Inches(W), Inches(H)
         self.body_top = 1.95 if nav_style == "single" else 2.2
@@ -276,6 +283,10 @@ class Deck:
         """single: '/ coloured tag'; double: bold black title (+ optional grey subtitle)."""
         if self.nav_style == "single":
             self.tag(s, d.get("tag"), kind or d.get("kind", "neutral"))
+            if d.get("_focus") and d.get("tag") and d.get("subtitle"):  # a focus step's explanation
+                x = 0.9 + text_w(d["tag"], 17) + 0.7 + 0.3
+                self.textbox(s, x, self.body_top - 0.77, W - 0.6 - x, 0.5, d["subtitle"], size=14, color="muted",
+                             anchor=MSO_ANCHOR.MIDDLE)
             return
         if d.get("title"):
             self.textbox(s, 0.6, 1.25, W - 1.2, 0.5, d["title"], size=24, color="dark", bold=True,
@@ -325,11 +336,46 @@ class Deck:
         if marks and rect[2] < 3.5:
             WARN.append(f"[{label}] annotated {fig.get('id') or 'figure'} is only {rect[2]:.1f}in wide — "
                         "use balanced/visual density or a smaller text_ratio")
-        if marks:
-            self.marks(s, rect, fig, gut, label)
-            if fig.get("reveal") != "click":  # animated marks must stay ungrouped (PowerPoint rule)
-                grp = s.shapes.add_group_shape(list(s.shapes)[n0:])
-                grp.name = f"標註/{fig.get('id') or '圖'}"
+        mark_geo = self.marks(s, rect, fig, gut, label) if marks else []
+        self.focus_figure(s, rect, fig, mark_geo, n0, label)
+        if marks and fig.get("reveal") != "click":  # animated marks must stay ungrouped (PowerPoint rule)
+            grp = s.shapes.add_group_shape(list(s.shapes)[n0:])
+            grp.name = f"標註/{fig.get('id') or '圖'}"
+
+    def focus_figure(self, s, rect, fig, mark_geo, n0, label):
+        """On a focus page: keep one region (or the whole figure) bright and veil the rest of the screenshot."""
+        if not self.focus:
+            return
+        regions = {r.get("id"): r for r in fig.get("regions", [])}
+        fid = fig.get("id")
+        rx, ry, rw, rh = rect
+        name = f"聚焦/{fid or '圖'}"
+        if self.focus in regions:
+            geo = mark_geometry({**regions[self.focus], "type": "band"})
+            if geo is None:
+                WARN.append(f"[{label}] region '{self.focus}' of {fid} needs x/y/w/h or row/col")
+                return
+            self.focus_hit = True
+            fx, fy, fw, fh = geo
+            # four veils around the lit region, clipped to the image
+            for k, (vx, vy, vw, vh) in enumerate([(0, 0, 1, fy), (0, fy + fh, 1, 1 - fy - fh),
+                                                   (0, fy, fx, fh), (fx + fw, fy, 1 - fx - fw, fh)]):
+                if vw > 0.001 and vh > 0.001:
+                    v = self.shape(s, MSO_SHAPE.RECTANGLE, rx + vx * rw, ry + vy * rh, vw * rw, vh * rh,
+                                   fill="FFFFFF")
+                    set_alpha(v, 100 - FADE_ALPHA)
+                    v.name = f"{name}/遮罩{k + 1}"
+            for (gx, gy, gw, gh), ids in mark_geo:  # marks outside the region fade too
+                cx, cy = gx + gw / 2, gy + gh / 2
+                if not (fx <= cx <= fx + fw and fy <= cy <= fy + fh):
+                    for sh in s.shapes:
+                        if sh.shape_id in ids:
+                            fade(sh)
+        elif self.focus == fid:
+            self.focus_hit = True  # the whole figure is the lit block
+        else:  # another figure (or diagram part) is lit: fade this whole figure
+            for sh in list(s.shapes)[n0:]:
+                fade(sh)
 
     def figure_body(self, s, x, y, w, h, fig, label):
         """Draw the screenshot (or a placeholder) inside the cell; returns its rect (x, y, w, h)."""
@@ -432,14 +478,15 @@ class Deck:
                     side_items[side].append(item)
                 else:
                     WARN.append(f"[{label}] {name} mark {k}: side must be one of {NOTE_SIDES}")
-            groups.append((m, ids))
+            groups.append((m, ids, (fx, fy, fw, fh)))
         self.place_side_labels(s, rect, gut, side_items, name)
         if reveal:
-            for m, ids in groups:
+            for m, ids, _ in groups:
                 if m.get("with_previous") and self.steps:
                     self.steps[-1].extend(ids)
                 else:
                     self.steps.append(ids)
+        return [(geo, set(ids)) for _, ids, geo in groups]
 
     def note_label(self, s, item, tx, ty, tw, name, align=PP_ALIGN.LEFT, anchor_pt=None):
         """Text box at (tx, ty) plus, for notes, an arrow from the box edge to the target point."""
@@ -926,22 +973,53 @@ class Deck:
                 hint = " (divider pages were removed — delete this slide)" if t == "divider" else ""
                 WARN.append(f"[{label}] unknown slide type '{t}' — skipped{hint}")
                 continue
-            fn(d, label)
-            steps = self.steps
-            if steps and self.keyframes:
-                # one slide per click: frame k shows the first k steps (the slide is rebuilt identically)
-                drop_shapes(self.prs.slides[-1], [i for st in steps for i in st])
-                self.page_number(self.prs.slides[-1])
-                for k in range(1, len(steps) + 1):
-                    fn(d, label)
-                    drop_shapes(self.prs.slides[-1], [i for st in steps[k:] for i in st])
-                    self.page_number(self.prs.slides[-1])
+            for page in self.focus_pages(d, label):
+                self.render_page(fn, page, label)
+        WARN[:] = list(dict.fromkeys(WARN))  # rebuilt keyframes repeat their warnings
+        return self.prs
+
+    def focus_pages(self, d, label):
+        """A slide with `focus` expands into an overview page (unless focus_overview is false) plus one page per
+        step; each step lights one id and may override the slide's text. `conclusion` is not inherited by steps."""
+        if not d.get("focus"):
+            return [d]
+        base = {k: v for k, v in d.items() if k not in ("focus", "focus_overview")}
+        pages = [base] if d.get("focus_overview", True) else []
+        inherit = {k: v for k, v in base.items() if k not in ("conclusion", "conclusion_kind")}
+        for k, st in enumerate(d["focus"], start=1):
+            on = st.get("on")
+            if isinstance(on, list):
+                WARN.append(f"[{label}] focus step {k}: one block per step — using '{on[0]}'")
+                on = on[0] if on else None
+            if not on:
+                WARN.append(f"[{label}] focus step {k} has no 'on' — skipped")
                 continue
+            page = {**inherit, **{x: st[x] for x in FOCUS_KEYS if x in st}, "_focus": on}
+            pages.append(page)
+        return pages
+
+    def render_page(self, fn, d, label):
+        self.focus, self.focus_hit = d.get("_focus"), False
+        fn(d, label)
+        if self.focus and not self.focus_hit:
+            WARN.append(f"[{label}] focus '{self.focus}' matches no diagram node/module or figure region here")
+        steps = self.steps
+        if len(steps) > MAX_CLICKS:
+            WARN.append(f"[{label}] {len(steps)} click animations on one slide (keep it to {MAX_CLICKS}) — "
+                        "split the slide or drop reveal")
+        if steps and self.keyframes:
+            # one slide per click: frame k shows the first k steps (the slide is rebuilt identically)
+            drop_shapes(self.prs.slides[-1], [i for st in steps for i in st])
+            self.page_number(self.prs.slides[-1])
+            for k in range(1, len(steps) + 1):
+                fn(d, label)
+                drop_shapes(self.prs.slides[-1], [i for st in steps[k:] for i in st])
+                self.page_number(self.prs.slides[-1])
+        else:
             if steps:
                 click_steps(self.prs.slides[-1], steps)
             self.page_number(self.prs.slides[-1])
-        WARN[:] = list(dict.fromkeys(WARN))  # rebuilt keyframes repeat their warnings
-        return self.prs
+        self.focus = None
 
 
     def color_table(self):
@@ -1042,8 +1120,29 @@ class DiagramLayout:
             drawn += self.node(n)
         for e in self.edges:
             drawn += self.edge(e)
+        self.apply_focus(drawn)
         grp = self.s.shapes.add_group_shape(drawn)
         grp.name = "架構圖"
+
+    def apply_focus(self, drawn):
+        focus = self.deck.focus
+        if not focus:
+            return
+        mod = next((m for m in self.modules if m.get("id") == focus), None)
+        lit_nodes = set(mod.get("nodes", [])) if mod else ({focus} if focus in self.box else set())
+        if not lit_nodes:
+            return  # not ours (e.g. a figure region on another slide type)
+        self.deck.focus_hit = True
+        keep = {f"架構圖/{i}" for i in lit_nodes}
+        keep |= {f"架構圖/{i}/縮圖" for i in lit_nodes} | {f"架構圖/{i}/文字" for i in lit_nodes}
+        if mod:
+            keep |= {f"架構圖/模組/{focus}", f"架構圖/模組/{focus}/標題"}
+        for e in self.edges:
+            if e["from"] in lit_nodes or e["to"] in lit_nodes:
+                keep |= {f"架構圖/連線/{e['from']}-{e['to']}", f"架構圖/連線/{e['from']}-{e['to']}/標籤"}
+        for sh in drawn:
+            if sh.name not in keep:
+                fade(sh)
 
     # -------------------------------------------------------------- parts
     def module(self, m):
@@ -1323,6 +1422,42 @@ def mark_geometry(m):
     if fx is None or fy is None:
         return None
     return fx, fy, fw, fh
+
+
+def set_alpha(sh, pct):
+    """Opacity (0-100) of a shape's solid fill."""
+    clr = sh.fill._xPr.find(qn("a:solidFill")).find(qn("a:srgbClr"))
+    for a in clr.findall(qn("a:alpha")):
+        clr.remove(a)
+    etree.SubElement(clr, qn("a:alpha")).set("val", str(int(pct * 1000)))
+
+
+def fade(sh):
+    """Out-of-focus look: fills and lines ~70% transparent, text C0C0C0, pictures washed out."""
+    el = sh._element
+    if el.tag == qn("p:grpSp"):
+        for child in sh.shapes:
+            fade(child)
+        return
+    blip = el.find(".//" + qn("a:blip"))
+    if blip is not None:  # picture
+        for a in blip.findall(qn("a:alphaModFix")):
+            blip.remove(a)
+        etree.SubElement(blip, qn("a:alphaModFix")).set("amt", str(FADE_ALPHA * 1000))
+    sppr = el.find(qn("p:spPr"))
+    if sppr is not None:
+        for path in ((qn("a:solidFill"), qn("a:srgbClr")), (qn("a:ln"), qn("a:solidFill"), qn("a:srgbClr"))):
+            clr = sppr.find("/".join(path))
+            if clr is not None:
+                old = clr.find(qn("a:alpha"))
+                base = int(old.get("val")) if old is not None else 100000
+                if old is not None:
+                    clr.remove(old)
+                etree.SubElement(clr, qn("a:alpha")).set("val", str(int(base * FADE_ALPHA / 100)))
+    if getattr(sh, "has_text_frame", False) and sh.has_text_frame:
+        for para in sh.text_frame.paragraphs:
+            for r in para.runs:
+                r.font.color.rgb = RGBColor.from_string(FADE_TEXT)
 
 
 def drop_shapes(slide, shape_ids):

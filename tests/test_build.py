@@ -23,7 +23,8 @@ def test_builds_without_layout_warnings(tmp_path, spec_path, nav, density):
     bd.render(spec, spec_path.parent, density, nav, str(out))
     layout_warnings = [w for w in bd.WARN if "image missing" not in w]
     assert not layout_warnings, layout_warnings
-    assert len(Presentation(str(out)).slides) == 1 + len(spec["slides"])
+    expected = sum(1 + len(sl.get("focus", [])) if sl.get("focus") else 1 for sl in spec["slides"])
+    assert len(Presentation(str(out)).slides) == 1 + expected  # cover + slides (+ focus pages)
 
 
 def test_active_tab_matches_chapter(tmp_path):
@@ -709,3 +710,99 @@ def test_timeline_conclusion_keyframes(tmp_path):
               keyframes=True)
     before, after = list(Presentation(str(out)).slides)[1:]
     assert not named(before, "結論橫條") and named(after, "結論橫條")
+
+
+# ---------------------------------------------------------------- progressive focus
+def alpha_of(sh, path=("a:solidFill", "a:srgbClr")):
+    clr = sh._element.find(bd.qn("p:spPr")).find("/".join(bd.qn(x) for x in path))
+    a = clr.find(bd.qn("a:alpha")) if clr is not None else None
+    return int(a.get("val")) if a is not None else 100000
+
+
+def faded(sh):
+    runs = [r for p in sh.text_frame.paragraphs for r in p.runs] if sh.has_text_frame else []
+    return alpha_of(sh) < 100000 or any(str(r.font.color.rgb) == bd.FADE_TEXT for r in runs)
+
+
+def focus_deck(tmp_path, focus, **extra):
+    spec = concept_spec([{"type": "diagram", "chapter": "甲", "title": "元件", "diagram": "g", "focus": focus, **extra}])
+    spec["diagrams"] = {"g": DIAGRAM}
+    out = tmp_path / "f.pptx"
+    bd.render(spec, tmp_path, "visual", "double", str(out))
+    return list(Presentation(str(out)).slides)[1:]
+
+
+def test_focus_expands_overview_plus_one_page_per_step(tmp_path):
+    pages = focus_deck(tmp_path, [{"on": "c", "subtitle": "先看 C"}, {"on": "d"}])
+    assert len(pages) == 3
+    overview, on_c, on_d = (by_name(p) for p in pages)
+    assert not any(faded(sh) for name, sh in overview.items() if name.startswith("架構圖/"))
+    assert not faded(on_c["架構圖/c"]) and faded(on_c["架構圖/a"]) and faded(on_c["架構圖/d"])
+    assert "先看 C" in texts(pages[1])
+    # edges touching the lit node stay; others fade
+    assert alpha_of(on_c["架構圖/連線/a-c"], ("a:ln", "a:solidFill", "a:srgbClr")) == 100000
+    assert not faded(on_d["架構圖/d"]) and faded(on_d["架構圖/c"])
+    # positions never move between pages
+    assert emu_box(on_c["架構圖/c"]) == emu_box(on_d["架構圖/c"]) == emu_box(overview["架構圖/c"])
+
+
+def test_focus_on_module_lights_its_nodes(tmp_path):
+    (_, page) = focus_deck(tmp_path, [{"on": "m"}])
+    n = by_name(page)
+    assert not faded(n["架構圖/a"]) and not faded(n["架構圖/b"]) and not faded(n["架構圖/模組/m"])
+    assert faded(n["架構圖/c"])
+
+
+def test_focus_overview_can_be_skipped_and_conclusion_not_inherited(tmp_path):
+    pages = focus_deck(tmp_path, [{"on": "a"}, {"on": "b", "conclusion": "B 才是關鍵"}],
+                       focus_overview=False, conclusion="總結")
+    assert len(pages) == 2
+    assert not named(pages[0], "結論橫條")  # the slide-level conclusion is not copied onto steps
+    assert texts(pages[1])["B 才是關鍵"]
+
+
+def test_focus_one_block_per_step_and_unknown_id(tmp_path):
+    focus_deck(tmp_path, [{"on": ["a", "b"]}, {"on": "zz"}])
+    assert any("one block per step" in w for w in bd.WARN)
+    assert any("'zz' matches no" in w for w in bd.WARN)
+
+
+def test_focus_on_screenshot_region(tmp_path):
+    from PIL import Image
+    Image.new("RGB", (900, 300), "white").save(tmp_path / "f.png")
+    fig = {"id": "Figure 3", "path": "f.png",
+           "regions": [{"id": "a", "x": 0, "y": 0, "w": 1 / 3, "h": 1}, {"id": "b", "x": 1 / 3, "y": 0, "w": 1 / 3, "h": 1}],
+           "marks": [{"type": "box", "x": 0.8, "y": 0.2, "w": 0.1, "h": 0.2},
+                     {"type": "box", "x": 0.1, "y": 0.2, "w": 0.1, "h": 0.2}]}
+    spec = concept_spec([{"type": "content", "chapter": "甲", "title": "t", "one_line": "y", "figs": [fig],
+                          "focus": [{"on": "a"}, {"on": "b"}]}])
+    out = tmp_path / "f.pptx"
+    bd.render(spec, tmp_path, "visual", "double", str(out))
+    overview, on_a, on_b = list(Presentation(str(out)).slides)[1:]
+    assert not [sh for sh in flat_shapes(overview.shapes) if sh.name.startswith("聚焦/")]
+    n = by_name(on_a)
+    pic = picture(on_a)
+    veils = [sh for name, sh in n.items() if name.startswith("聚焦/Figure 3/遮罩")]
+    assert veils and all(alpha_of(v) == (100 - bd.FADE_ALPHA) * 1000 for v in veils)
+    # the lit third (left) is not covered by any veil
+    lit_right = pic.left + pic.width / 3
+    assert all(v.left >= lit_right - 2000 or v.top >= pic.top + pic.height - 2000 for v in veils)
+    # a mark inside region a stays; one outside fades
+    assert not faded(n["標註/Figure 3/紅框2"]) and alpha_of(n["標註/Figure 3/紅框1"], ("a:ln", "a:solidFill", "a:srgbClr")) < 100000
+
+
+def test_more_than_three_clicks_warns(tmp_path):
+    marks = [{"type": "box", "x": 0.1 * k, "y": 0.1, "w": 0.05, "h": 0.05} for k in range(1, 5)]
+    mark_slide(tmp_path, marks, reveal="click")
+    assert any("click animations on one slide" in w for w in bd.WARN)
+
+
+def test_single_nav_shows_focus_subtitle_next_to_tag(tmp_path):
+    spec = concept_spec([{"type": "diagram", "chapter": "甲", "tag": "元件", "title": "t", "diagram": "g",
+                          "focus": [{"on": "c", "subtitle": "先看 C"}]}])
+    spec["diagrams"] = {"g": DIAGRAM}
+    step = build(tmp_path, spec, "single")[2]
+    t = texts(step)
+    assert "先看 C" in t and t["先看 C"].left > t["元件"].left + t["元件"].width
+    overview = texts(build(tmp_path, spec, "single")[1])
+    assert "先看 C" not in overview  # ordinary single-nav pages keep the tag-only heading

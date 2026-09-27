@@ -190,6 +190,30 @@
 - 年份一律要有來源（論文的 related work 或參考文獻），不確定的不要放。
 - 不畫項目之間的關係箭頭；可以加 `conclusion`。整張圖組成群組「時間軸」，膠囊命名 `時間軸/<label>`。
 
+### 漸進聚焦（`focus`）
+
+`content`（有截圖的頁）與 `diagram` 頁可以加 `focus`，建置時展開成多頁：先一頁全貌，再每一步亮一塊、其餘淡化
+（填色與線條透明度約 70%、文字 `C0C0C0`、截圖被半透明白框蓋住）。位置完全不動。
+
+```json
+{"type": "diagram", "diagram": "vlm", "title": "方法元件",
+ "focus": [
+   {"on": "enc",  "subtitle": "先把兩個模態各自編碼"},
+   {"on": "fuse", "subtitle": "再用跨模態注意力融合", "conclusion": "兩邊在每一層都有互動", "conclusion_kind": "solution"}
+ ]}
+```
+
+- `on`：**一步只亮一塊**。架構圖寫節點或模組框的 id（模組會連同框內節點一起亮；連到亮起節點的連線也保留）；
+  截圖寫 `figs[].regions` 的區塊 id，或整張圖的 `id`（同頁有多張圖時只亮那一張）。
+- 截圖先用 `regions` 劃出區塊，寫法和截圖標註的位置一樣（`x` `y` `w` `h` 或 `row`／`col`）：
+  `"regions": [{"id": "a", "x": 0, "y": 0, "w": 0.33, "h": 1}, …]`。區塊外的標註會一起淡化。
+- 順序：截圖照**論文描述這張圖的順序**；架構圖照講述順序。
+- 每一步可以覆寫 `title` `subtitle` `tag` `one_line` `short` `full` `notes` `conclusion` `conclusion_kind` `conclusion_pos`。
+  頁面本身的 `conclusion` 只出現在全貌頁，不會複製到每一步。
+- `"focus_overview": false` 可以省略全貌頁。
+- 每一步的說明建議寫在 `subtitle`：雙排顯示在標題下方；單排（只有「/ 標籤」）在聚焦頁會顯示在標籤右側。
+- 一頁的點擊動畫超過 3 個會警告（結論橫條、`reveal` 的標註都算）。
+
 ## 5. 圖片與表格
 
 - `figs` 最多 3 張並排，4 張排成 2×2；在文字欄旁邊時，2 張以內上下疊放。
@@ -298,5 +322,7 @@ python scripts/build_deck.py deck.json -o out.pptx --keyframes       # 不用動
 - `conclusion bar text may overflow`：結論橫條文字太長 → 縮成一句話。
 - `annotated … is only …in wide`：有標註的截圖太小 → 換密度或調 `text_ratio`。
 - `mark N: …`：標註的類型、座標或 `side` 寫錯。
+- `N click animations on one slide`：點擊動畫超過 3 個 → 拆頁，或拿掉部分 `reveal`。
+- `focus '…' matches no …`：`focus` 的 `on` 在這頁找不到對應的節點、模組或截圖區塊。
 - `image missing`：找不到圖 → 補圖，或保留佔位並在回報中列出。
 - `only N figures fit`：圖太多 → 拆頁。

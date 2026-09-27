@@ -312,6 +312,20 @@
       "diagram": "three_factor",
       "notes": [
         "從快照出發，三個因子各自估計，再組合成格間流量。"
+      ],
+      "focus": [
+        {
+          "on": "dep",
+          "subtitle": "出發機率：這格的人多想離開"
+        },
+        {
+          "on": "att",
+          "subtitle": "聚集分數：那格有多吸引人"
+        },
+        {
+          "on": "dist",
+          "subtitle": "距離衰減：越遠越不容易過去"
+        }
       ]
     },
     {
