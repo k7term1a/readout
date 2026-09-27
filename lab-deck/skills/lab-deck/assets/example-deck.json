@@ -1,0 +1,319 @@
+{
+  "style": {
+    "nav": "single",
+    "density": "balanced"
+  },
+  "chapters": [
+    {
+      "name": "問題背景",
+      "sections": [
+        "資料限制",
+        "既有方法"
+      ]
+    },
+    {
+      "name": "方法提案",
+      "sections": [
+        "問題設定",
+        "三因子模型",
+        "效率"
+      ]
+    },
+    {
+      "name": "實驗驗證",
+      "sections": [
+        "結果"
+      ]
+    },
+    {
+      "name": "討論啟發",
+      "sections": [
+        "對我的研究"
+      ]
+    },
+    {
+      "name": "參考文獻",
+      "sections": []
+    }
+  ],
+  "cover": {
+    "title": "只看人口快照，能推回人怎麼流動嗎？",
+    "subtitle": "A Fast and Accurate Method for Estimating People Flow from Spatiotemporal Population Data — IJCAI 2018",
+    "byline": "報告人．Lab Meeting 論文報告",
+    "date": "2026 / 10 / 02"
+  },
+  "slides": [
+    {
+      "type": "divider",
+      "chapter": "問題背景"
+    },
+    {
+      "type": "content",
+      "chapter": "問題背景",
+      "tag": "一、只有快照，沒有軌跡",
+      "kind": "problem",
+      "full": [
+        "電信業者可以提供各網格在每個時間點的人口數，但出於隱私考量，個人的移動軌跡通常拿不到。",
+        "所以手上只有一連串「某時某格有多少人」的快照，看不出人是從哪裡來、往哪裡去。"
+      ],
+      "short": [
+        "只有各網格、各時段的人口數",
+        "個人軌跡因隱私問題無法取得"
+      ],
+      "one_line": "資料只有網格人口快照，沒有個人軌跡",
+      "figs": [
+        {
+          "id": "Figure 1",
+          "caption": "網格人口快照示意"
+        }
+      ],
+      "section": "資料限制"
+    },
+    {
+      "type": "content",
+      "chapter": "問題背景",
+      "tag": "二、格間流動看不見",
+      "kind": "problem",
+      "full": [
+        "相鄰兩個時間點的人口差，可以由很多種不同的流動組合來解釋。",
+        "例如某格人口沒變，可能是完全沒人移動，也可能是流入與流出剛好抵銷，單看快照無法分辨。"
+      ],
+      "short": [
+        "同一組人口變化，可對應多種流動",
+        "流入與流出抵銷時完全看不出來"
+      ],
+      "one_line": "人口變化相同，背後的流動可能完全不同",
+      "figs": [
+        {
+          "id": "Figure 2",
+          "caption": "時間 t 的人口"
+        },
+        {
+          "id": "Figure 3",
+          "caption": "時間 t+1 的人口"
+        }
+      ],
+      "section": "資料限制"
+    },
+    {
+      "type": "content",
+      "chapter": "問題背景",
+      "tag": "三、既有方法算不動",
+      "kind": "problem",
+      "full": [
+        "既有方法把每一對網格之間的流量都當成要推論的變數。",
+        "網格一多，變數量隨網格對數快速成長，推論時間難以接受，很難套用到整個城市。"
+      ],
+      "short": [
+        "每一對網格的流量都是變數",
+        "網格一多，推論時間急遽上升"
+      ],
+      "one_line": "變數隨網格對數成長，城市尺度算不動",
+      "figs": [
+        {
+          "id": "Figure 4",
+          "caption": "既有方法的計算時間"
+        }
+      ],
+      "section": "既有方法"
+    },
+    {
+      "type": "divider",
+      "chapter": "方法提案"
+    },
+    {
+      "type": "mapping",
+      "chapter": "方法提案",
+      "pairs": [
+        [
+          "只有快照，沒有軌跡",
+          "從快照反推流量"
+        ],
+        [
+          "格間流動看不見",
+          "三個因子約束流動"
+        ],
+        [
+          "既有方法算不動",
+          "參數少、算得快"
+        ]
+      ],
+      "notes": [
+        "三個問題各自對應一個解法，接下來依序說明。"
+      ],
+      "section": "問題設定",
+      "tag": "問題與解法對照"
+    },
+    {
+      "type": "content",
+      "chapter": "方法提案",
+      "tag": "一、從快照反推流量",
+      "kind": "solution",
+      "full": [
+        "把格間流量當作隱藏變數，找一組流量，讓它推算出的下一時刻人口最接近實際觀測。",
+        "這樣模型只需要快照資料就能訓練，完全不用個人軌跡。"
+      ],
+      "short": [
+        "流量是隱藏變數",
+        "目標：重建下一時刻的人口"
+      ],
+      "one_line": "找一組流量，讓它最能解釋下一時刻的人口",
+      "figs": [
+        {
+          "id": "Figure 5",
+          "caption": "問題設定示意"
+        }
+      ],
+      "section": "問題設定"
+    },
+    {
+      "type": "content",
+      "chapter": "方法提案",
+      "tag": "二、三個因子約束流動",
+      "kind": "solution",
+      "full": [
+        "作者把「從 A 格移到 B 格」的機率拆成三個有物理意義的因子：A 格的出發機率、B 格的聚集分數，以及兩格之間的距離衰減。",
+        "模型不必替每一對網格各學一個數值，而是由少量、可解釋的參數組合出所有流動。"
+      ],
+      "short": [
+        "出發機率：這格的人多想離開",
+        "聚集分數：那格有多吸引人",
+        "距離衰減：越遠越不容易過去"
+      ],
+      "one_line": "移動機率 = 出發機率 × 聚集分數 × 距離衰減",
+      "figs": [
+        {
+          "id": "Figure 6",
+          "caption": "三因子模型架構"
+        }
+      ],
+      "section": "三因子模型"
+    },
+    {
+      "type": "content",
+      "chapter": "方法提案",
+      "tag": "三、參數少、算得快",
+      "kind": "solution",
+      "full": [
+        "因子化之後，未知數不再隨網格對數成長，最佳化問題小了很多。",
+        "作者並設計對應的估計演算法，讓方法能套用到城市尺度的網格。"
+      ],
+      "short": [
+        "未知數大幅減少",
+        "可套用到城市尺度"
+      ],
+      "one_line": "參數量下降，推論速度大幅提升",
+      "figs": [
+        {
+          "id": "Figure 7",
+          "caption": "演算法流程"
+        }
+      ],
+      "section": "效率"
+    },
+    {
+      "type": "divider",
+      "chapter": "實驗驗證"
+    },
+    {
+      "type": "content",
+      "chapter": "實驗驗證",
+      "tag": "準確度與速度",
+      "kind": "neutral",
+      "full": [
+        "作者在真實人口資料與模擬資料上，比較估計準確度與計算時間。",
+        "右表數值請從論文的實驗表格填入。"
+      ],
+      "short": [
+        "比較準確度與計算時間",
+        "數值待從論文表格填入"
+      ],
+      "one_line": "同時比較準確度與計算時間",
+      "table": [
+        [
+          "方法",
+          "估計誤差",
+          "計算時間"
+        ],
+        [
+          "既有方法",
+          "— 待填 —",
+          "— 待填 —"
+        ],
+        [
+          "本文方法",
+          "— 待填 —",
+          "— 待填 —"
+        ]
+      ],
+      "figs": [
+        {
+          "id": "Figure 8",
+          "caption": "估計誤差比較"
+        },
+        {
+          "id": "Figure 9",
+          "caption": "計算時間比較"
+        }
+      ],
+      "section": "結果"
+    },
+    {
+      "type": "divider",
+      "chapter": "討論啟發"
+    },
+    {
+      "type": "split",
+      "chapter": "討論啟發",
+      "tag": "對我研究的意義",
+      "good_title": "可以借用的",
+      "bad_title": "限制與疑問",
+      "good": [
+        [
+          "距離衰減可換成路網可達時間",
+          "用實際可達範圍取代直線距離，更貼近真實移動"
+        ],
+        [
+          "不需要軌跡資料",
+          "與常見的網格人口資料格式相容"
+        ]
+      ],
+      "bad": [
+        [
+          "大型活動時是否適用？",
+          "人從網格外大量湧入時，模型假設可能不成立"
+        ],
+        [
+          "仍受網格解析度限制",
+          "估出的是格與格之間的流量，格內分布仍未知"
+        ]
+      ],
+      "section": "對我的研究"
+    },
+    {
+      "type": "refs",
+      "chapter": "參考文獻",
+      "refs": [
+        {
+          "title": "A Fast and Accurate Method for Estimating People Flow from Spatiotemporal Population Data",
+          "source": "Akagi et al., IJCAI 2018",
+          "gist": "將網格間的流動拆成出發機率、聚集分數與距離衰減三個因子。"
+        },
+        {
+          "title": "Enhancing spatial accuracy of mobile phone data using multi-temporal dasymetric interpolation",
+          "source": "",
+          "gist": "結合土地利用、建物與時間利用調查，產生高解析度的 24 小時動態人口圖層。"
+        },
+        {
+          "title": "Dynamic cities: Location-based accessibility modelling as a function of time",
+          "source": "",
+          "gist": "引入大眾運輸，分析顧客在不同時間抵達商店的機會。"
+        }
+      ]
+    },
+    {
+      "type": "statement",
+      "text": "Q&A"
+    }
+  ]
+}

@@ -1,0 +1,221 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AI Paper Annotator — Main Paper Schema",
+  "description": "Structure for paper.json. Tables are always external files in tables/ (produced by ai-paper-table skill). Figures go in figures/ (user screenshots).",
+
+  "type": "object",
+  "required": ["meta", "sections", "summary"],
+
+  "definitions": {
+
+    "highlight": {
+      "type": "object",
+      "required": ["text", "type"],
+      "properties": {
+        "text": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["concept", "problem", "solution", "method", "result"],
+          "description": "concept=purple, problem=red, solution=green, method=yellow, result=blue"
+        }
+      }
+    },
+
+    "paragraph": {
+      "type": "object",
+      "required": ["block_type", "en", "zh", "annotation"],
+      "properties": {
+        "block_type": { "const": "paragraph" },
+        "en": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/definitions/highlight" }] } }
+          ]
+        },
+        "zh": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "oneOf": [{ "type": "string" }, { "$ref": "#/definitions/highlight" }] } }
+          ]
+        },
+        "annotation": {
+          "type": "object",
+          "required": ["role", "logic", "note"],
+          "properties": {
+            "role": {
+              "type": "string",
+              "enum": ["問題定義","研究動機","文獻回顧","方法提出","模型元件描述","實作細節","實驗設計","結果分析","消融實驗","侷限討論","結論"]
+            },
+            "logic": { "type": "string" },
+            "note":  { "type": "string" }
+          }
+        }
+      }
+    },
+
+    "figure": {
+      "type": "object",
+      "required": ["block_type", "id", "type", "caption_en", "caption_zh", "aspect_ratio", "annotation"],
+      "properties": {
+        "block_type":   { "const": "figure" },
+        "id":           { "type": "string", "description": "e.g. figure_1 — user places figures/figure_1.png" },
+        "type": {
+          "type": "string",
+          "enum": ["模型架構圖","消融實驗表","效能比較圖","損失曲線","潛在空間視覺化","資料流程圖","注意力熱圖","訓練流程圖","其他"]
+        },
+        "caption_en":   { "type": "string" },
+        "caption_zh":   { "type": "string" },
+        "aspect_ratio": {
+          "type": "string",
+          "enum": ["wide", "square", "tall"],
+          "description": "wide=全欄寬(比較圖/曲線), square=浮動右側(架構圖), tall=固定高度置中(流程圖)"
+        },
+        "annotation": {
+          "type": "object",
+          "required": ["argument", "reading_tip"],
+          "properties": {
+            "argument":    { "type": "string" },
+            "reading_tip": { "type": "string" },
+            "data_flow":   { "type": "string", "description": "僅限架構圖，描述資料流向" }
+          }
+        }
+      }
+    },
+
+    "table_load": {
+      "description": "Placeholder for an external table file. The file tables/<table_id>.json must exist at HTML generation time. Use the ai-paper-table skill to produce it.",
+      "type": "object",
+      "required": ["block_type", "table_id"],
+      "properties": {
+        "block_type": { "const": "table_load" },
+        "table_id":   { "type": "string", "description": "e.g. table_1 → loads tables/table_1.json" }
+      }
+    },
+
+    "table_ref": {
+      "description": "Inline data snippet referencing specific cells of a previously loaded table. Triggers row highlight when the parent paragraph is scrolled into view.",
+      "type": "object",
+      "required": ["block_type", "table_id", "cells"],
+      "properties": {
+        "block_type": { "const": "table_ref" },
+        "table_id":   { "type": "string" },
+        "cells": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["row", "col"],
+            "properties": {
+              "row":   { "type": "integer", "description": "0-based row index into table rows array" },
+              "col":   { "type": "integer", "description": "0-based column index into table headers array" },
+              "label": { "type": "string",  "description": "Display label (overrides column header)" }
+            }
+          }
+        },
+        "note": { "type": "string", "description": "Short contextual note shown alongside the data" }
+      }
+    }
+
+  },
+
+  "properties": {
+
+    "meta": {
+      "type": "object",
+      "required": ["title", "authors", "venue", "year", "abstract_zh"],
+      "properties": {
+        "title":       { "type": "string" },
+        "authors":     { "type": "array", "items": { "type": "string" } },
+        "venue":       { "type": "string", "description": "e.g. NeurIPS 2024" },
+        "year":        { "type": "integer" },
+        "abstract_zh": { "type": "string" }
+      }
+    },
+
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title_en", "title_zh", "blocks"],
+        "properties": {
+          "id":       { "type": "string", "description": "URL slug, e.g. introduction" },
+          "title_en": { "type": "string" },
+          "title_zh": { "type": "string" },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                { "$ref": "#/definitions/paragraph" },
+                { "$ref": "#/definitions/figure" },
+                { "$ref": "#/definitions/table_load" },
+                { "$ref": "#/definitions/table_ref" }
+              ]
+            }
+          }
+        }
+      }
+    },
+
+    "summary": {
+      "type": "object",
+      "required": ["problem_gap", "contributions", "one_line", "experiment_conclusion", "applications"],
+      "properties": {
+        "problem_gap":            { "type": "string" },
+        "contributions":          { "type": "array", "items": { "type": "string" } },
+        "one_line":               { "type": "string" },
+        "experiment_conclusion":  { "type": "string" },
+        "applications":           { "type": "array", "items": { "type": "string" } },
+        "evolutionary_path": {
+          "type": "object",
+          "required": ["nodes", "edges"],
+          "properties": {
+            "nodes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "label", "year"],
+                "properties": {
+                  "id":            { "type": "string" },
+                  "label":         { "type": "string" },
+                  "year":          { "type": "integer" },
+                  "note":          { "type": "string" },
+                  "is_this_paper": { "type": "boolean" }
+                }
+              }
+            },
+            "edges": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["from", "to"],
+                "properties": {
+                  "from":  { "type": "string" },
+                  "to":    { "type": "string" },
+                  "label": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "fishbone": {
+          "type": "object",
+          "required": ["effect", "causes"],
+          "properties": {
+            "effect": { "type": "string", "description": "主要問題（魚頭）" },
+            "causes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["category", "items"],
+                "properties": {
+                  "category": { "type": "string" },
+                  "items":    { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+  }
+}

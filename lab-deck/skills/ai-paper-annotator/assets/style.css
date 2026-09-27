@@ -1,0 +1,422 @@
+/* ═══════════════════════════════════════════════════════
+   AI Paper Annotator — style.css
+   ═══════════════════════════════════════════════════════ */
+
+/* ── 1. CSS Variables (Light mode) ── */
+:root {
+  --beige:          #f5f1e9;
+  --navy:           #0f2744;
+  --navy-light:     #1e3a5f;
+  --paper:          #faf8f3;
+  --paper-zh:       #f0ece2;
+  --paper-active:   #e8f0fb;
+  --border:         #d4cfc4;
+  --text:           #1a1a1a;
+  --text-muted:     #6b7280;
+  --ann-bg:         #f8fafc;
+  --ann-border:     #e2e8f0;
+  --sep-color:      #d4cfc4;
+  --nav-bg:         #0f2744;
+  --nav-text:       #ffffff;
+  --sec-nav-bg:     #1e3a5f;
+  --sec-nav-link:   #93c5fd;
+  --summary-bg:     #0f2744;
+  --summary-text:   #e2e8f0;
+  --table-head-bg:  #0f2744;
+  --table-head-fg:  #e2e8f0;
+  --table-stripe:   #f1f5f9;
+  --table-ref-bg:   #eff6ff;
+  --table-ref-border: #3b82f6;
+  --cell-badge-bg:  #dbeafe;
+  --cell-label-fg:  #1e40af;
+  --fig-ph-bg:      #f1f5f9;
+  --fig-ph-fg:      #64748b;
+  --fig-ph-border:  #cbd5e1;
+  --tag-bg:         #1e3a5f;
+  --tag-fg:         #93c5fd;
+  --hl-concept-bg:  #ede9fe; --hl-concept-fg:  #5b21b6;
+  --hl-problem-bg:  #fee2e2; --hl-problem-fg:  #991b1b;
+  --hl-solution-bg: #dcfce7; --hl-solution-fg: #166534;
+  --hl-method-bg:   #fef9c3; --hl-method-fg:   #854d0e;
+  --hl-result-bg:   #dbeafe; --hl-result-fg:   #1e40af;
+  --evo-bg:         #f4f6f9;
+  --evo-node-bg:    #ffffff;
+  --evo-node-border:#94a3b8;
+  --evo-node-text:  #1e293b;
+  --evo-main-bg:    #0f2744;
+  --evo-main-fg:    #ffffff;
+  --evo-main-border:#3b82f6;
+  --evo-axis:       #94a3b8;
+  --evo-year-fill:  #475569;
+  --evo-note-fill:  #94a3b8;
+  --evo-edge-fill:  #94a3b8;
+  --navbar-h:       53px;
+  --secnav-h:       36px;
+  --sticky-top:     calc(53px + 36px + 8px);
+}
+
+/* ── 2. Dark mode ── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --beige:          #c9b99a;
+    --navy:           #0d1f36;
+    --navy-light:     #162d4a;
+    --paper:          #161b24;
+    --paper-zh:       #1c2330;
+    --paper-active:   #1a2a3e;
+    --border:         #2e3a4a;
+    --text:           #e2e8f0;
+    --text-muted:     #94a3b8;
+    --ann-bg:         #1a2233;
+    --ann-border:     #2e3a4a;
+    --sep-color:      #2e3a4a;
+    --nav-bg:         #0d1f36;
+    --sec-nav-bg:     #162d4a;
+    --sec-nav-link:   #7dd3fc;
+    --summary-bg:     #0d1f36;
+    --summary-text:   #cbd5e1;
+    --table-head-bg:  #162d4a;
+    --table-stripe:   #1a2233;
+    --table-ref-bg:   #1a2a3e;
+    --cell-badge-bg:  #1e3a5f;
+    --cell-label-fg:  #93c5fd;
+    --fig-ph-bg:      #1a2233;
+    --fig-ph-fg:      #64748b;
+    --fig-ph-border:  #2e3a4a;
+    --tag-bg:         #162d4a;
+    --tag-fg:         #7dd3fc;
+    --hl-concept-bg:  #2d1f5e; --hl-concept-fg:  #c4b5fd;
+    --hl-problem-bg:  #450a0a; --hl-problem-fg:  #fca5a5;
+    --hl-solution-bg: #052e16; --hl-solution-fg: #86efac;
+    --hl-method-bg:   #422006; --hl-method-fg:   #fcd34d;
+    --hl-result-bg:   #172554; --hl-result-fg:   #93c5fd;
+    --evo-bg:         #1a2233;
+    --evo-node-bg:    #1e2d42;
+    --evo-node-border:#3b4f6a;
+    --evo-node-text:  #e2e8f0;
+    --evo-main-bg:    #1d4ed8;
+    --evo-main-fg:    #ffffff;
+    --evo-main-border:#60a5fa;
+    --evo-axis:       #3b4f6a;
+    --evo-year-fill:  #64748b;
+    --evo-note-fill:  #64748b;
+    --evo-edge-fill:  #64748b;
+  }
+}
+
+/* ── 3. Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html  { scroll-behavior: smooth; }
+body  {
+  font-family: 'IBM Plex Sans', 'Noto Sans TC', sans-serif;
+  background: var(--paper);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.7;
+  transition: background 0.2s, color 0.2s;
+}
+
+/* ── 4. Navbar ── */
+#navbar {
+  background: var(--nav-bg);
+  color: var(--nav-text);
+  padding: 0.65rem 2rem;
+  position: sticky; top: 0; z-index: 100;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 1rem;
+  height: var(--navbar-h);
+}
+#navbar .paper-title {
+  font-size: 0.95rem; font-weight: 600; flex: 1; min-width: 200px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.legend { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.legend-item {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 0.72rem; opacity: 0.9;
+}
+.legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+/* ── 5. Section nav ── */
+#sec-nav {
+  background: var(--sec-nav-bg);
+  position: sticky; top: var(--navbar-h); z-index: 99;
+  overflow: hidden; white-space: nowrap;
+  padding: 0.45rem 1.5rem; height: var(--secnav-h);
+}
+#sec-nav a {
+  color: var(--sec-nav-link); text-decoration: none;
+  font-size: 0.78rem; margin-right: 1.2rem; transition: color 0.15s;
+}
+#sec-nav a:hover { color: var(--nav-text); }
+
+/* ── 6. Main & Section headers ── */
+main { max-width: 1400px; margin: 0 auto; padding: 2rem 1.5rem; }
+.section-header {
+  margin: 2.5rem 0 1rem; padding-bottom: 0.4rem;
+  border-bottom: 2px solid var(--beige);
+}
+.section-header h2   { font-size: 1.15rem; color: var(--beige); }
+.section-header .sec-zh { font-size: 0.85rem; color: var(--text-muted); }
+
+/* ── 7. Pair (paragraph row) ── */
+.pair {
+  display: grid; grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 1.5rem; margin-bottom: 1.8rem; align-items: start;
+  border-radius: 6px; padding: 0.5rem 0.4rem;
+  transition: background 0.2s;
+}
+.pair.is-active { background: var(--paper-active); }
+
+/* ── 8. Left column ── */
+.left-col { display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; }
+.en-block { font-family: 'Lora','Georgia',serif; font-size: 0.95rem; line-height: 1.85; }
+.en-block p { margin: 0; }
+.sep { border: none; border-top: 1px solid var(--sep-color); margin: 0.2rem 0; }
+.zh-block {
+  background: var(--paper-zh);
+  border-left: 3px solid var(--border);
+  padding: 0.6rem 0.8rem;
+  font-size: 0.92rem; line-height: 1.9;
+  color: var(--text); border-radius: 0 4px 4px 0;
+}
+
+/* ── 9. Highlights ── */
+.hl { border-radius: 3px; padding: 0.05em 0.2em; font-weight: 500; }
+.hl-concept  { background: var(--hl-concept-bg);  color: var(--hl-concept-fg); }
+.hl-problem  { background: var(--hl-problem-bg);  color: var(--hl-problem-fg); }
+.hl-solution { background: var(--hl-solution-bg); color: var(--hl-solution-fg); }
+.hl-method   { background: var(--hl-method-bg);   color: var(--hl-method-fg); }
+.hl-result   { background: var(--hl-result-bg);   color: var(--hl-result-fg); }
+
+/* ── 10. Annotation cards ── */
+.ann-card {
+  background: var(--ann-bg); border: 1px solid var(--ann-border);
+  border-left: 4px solid #94a3b8; border-radius: 6px;
+  padding: 0.8rem 1rem; font-size: 0.84rem; line-height: 1.65; color: var(--text);
+}
+.ann-role {
+  display: inline-block; color: #fff; font-size: 0.72rem; font-weight: 600;
+  padding: 1px 7px; border-radius: 4px; margin-bottom: 0.5rem;
+}
+.ann-section { margin-top: 0.55rem; }
+.ann-label {
+  font-size: 0.7rem; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px;
+}
+
+/* ── 11. Figures ── */
+.fig-wrap {
+  margin-bottom: 0.6rem; border: 1px solid var(--border);
+  border-radius: 8px; overflow: hidden; background: var(--ann-bg);
+}
+.fig-wrap--wide   { width: 100%; }
+.fig-wrap--square { float: right; width: 46%; margin: 0 0 0.8rem 1rem; }
+.fig-wrap--tall   { width: 60%; margin: 0 auto 0.6rem; display: block; float: none; }
+.fig-type-tag {
+  display: inline-block; background: var(--tag-bg); color: var(--tag-fg);
+  font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; margin: 7px 8px 4px;
+}
+.fig-img              { display: block; width: 100%; height: auto; object-fit: contain; }
+.fig-img--tall        { max-height: 420px; width: auto; margin: 0 auto; }
+.fig-img--square      { max-height: 300px; }
+.fig-placeholder {
+  background: var(--fig-ph-bg); color: var(--fig-ph-fg); font-size: 0.8rem;
+  text-align: center; padding: 1.8rem; border-radius: 6px; margin: 0.4rem;
+  border: 2px dashed var(--fig-ph-border);
+}
+.fig-caption   { padding: 0.4rem 0.8rem 0.7rem; }
+.fig-id        { font-weight: 700; margin-right: 0.3rem; font-size: 0.85rem; }
+.fig-cap-en    { font-size: 0.84rem; font-style: italic; }
+.fig-cap-zh    { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+
+/* ── 12. Table section ── */
+/*
+  Structure:
+    .table-section
+      .table-sticky-wrap     ← legacy class name kept for compatibility,
+                                no longer sticky — just a normal block
+        .pair.table-sticky-pair
+          .left-col → table
+          .right-col → table annotation
+      .table-refs-body       ← paragraph .pair elements that cite this table
+
+  The table is now a normal flow element. No sticky behavior, no row hiding,
+  no scroll-driven state. Row highlighting (.row-ref / .row-active) still
+  works but only as visual emphasis when the table is in view.
+*/
+.table-section {
+  margin-bottom: 1.8rem;
+}
+
+.table-sticky-wrap {
+  background: var(--paper);
+  padding-bottom: 0.6rem;
+}
+
+.table-sticky-pair {
+  margin-bottom: 0 !important;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--ann-bg);
+}
+
+/* Pretty horizontal scrollbar for table overflow */
+.table-wrap {
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-muted) transparent;
+}
+.table-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+.table-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+.table-wrap::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: 4px;
+  opacity: 0.5;
+}
+.table-wrap::-webkit-scrollbar-thumb:hover {
+  background: var(--sec-nav-link);
+}
+
+.table-type-tag {
+  display: inline-block; background: var(--tag-bg); color: var(--tag-fg);
+  font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; margin: 7px 8px 4px;
+}
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.data-table caption {
+  text-align: left; padding: 0.5rem 0.8rem 0.3rem;
+  font-size: 0.84rem; color: var(--text); caption-side: top;
+}
+.cap-zh { font-size: 0.76rem; color: var(--text-muted); font-style: normal; }
+.data-table thead th {
+  background: var(--table-head-bg); color: var(--table-head-fg);
+  padding: 0.4rem 0.8rem; text-align: left; font-size: 0.78rem; white-space: nowrap;
+}
+.data-table tbody td {
+  padding: 0.35rem 0.8rem; border-bottom: 1px solid var(--border); transition: background 0.2s;
+}
+.data-table tbody tr:nth-child(even) td { background: var(--table-stripe); }
+.data-table tbody tr:hover td          { background: var(--hl-result-bg); }
+/* ref = row mentioned somewhere in the section (faint) */
+.data-table tbody tr.row-ref    td { background: var(--hl-method-bg); }
+/* active = row mentioned in the currently centred paragraph */
+.data-table tbody tr.row-active td { background: var(--hl-solution-bg); }
+.data-table tbody tr { transition: background 0.2s; }
+
+/* inline table-ref snippet inside a paragraph */
+.table-refs-body .pair { margin-bottom: 0.8rem; }
+.table-ref {
+  background: var(--table-ref-bg); border-left: 3px solid var(--table-ref-border);
+  border-radius: 4px; padding: 0.35rem 0.8rem; font-size: 0.82rem; margin: 0.3rem 0; color: var(--text);
+}
+.table-ref-badge { font-weight: 700; color: var(--table-ref-border); margin-right: 0.35rem; font-size: 0.74rem; }
+.cell-snippet {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: var(--cell-badge-bg); border-radius: 4px; padding: 1px 5px; margin: 0 2px;
+}
+.cell-label { font-size: 0.72rem; color: var(--cell-label-fg); font-weight: 600; }
+
+/* ── 13. Summary ── */
+#summary {
+  margin-top: 3rem; background: var(--summary-bg); color: var(--summary-text);
+  border-radius: 12px; padding: 2rem;
+}
+#summary h2 {
+  color: #fff; font-size: 1.2rem; margin-bottom: 1.5rem;
+  border-bottom: 1px solid #334155; padding-bottom: 0.5rem;
+}
+.sum-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+.sum-block h3 {
+  font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #93c5fd; margin-bottom: 0.5rem;
+}
+.sum-block p, .sum-block li { font-size: 0.88rem; line-height: 1.7; color: var(--summary-text); }
+.sum-block ul { padding-left: 1.2rem; }
+.sum-block li { margin-bottom: 0.3rem; }
+.one-line-box {
+  background: #1e3a5f; border-radius: 8px; padding: 0.8rem 1rem;
+  font-size: 0.95rem; font-style: italic; color: #e2e8f0;
+  border-left: 4px solid #3b82f6; grid-column: 1 / -1;
+}
+.diagram-block { grid-column: 1 / -1; margin-top: 1rem; }
+.diagram-block h3 {
+  font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #93c5fd; margin-bottom: 0.8rem;
+}
+
+/* ── 14. Evolutionary Path SVG ── */
+.evo-svg {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  height: auto;
+  margin: 0 auto;
+  overflow: visible;
+}
+.evo-year       { font-size: 12px; font-family: 'IBM Plex Sans', sans-serif; }
+.evo-label      { font-size: 12px; font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; transition: opacity 0.15s ease; pointer-events: none; }
+.evo-node-rect  { cursor: pointer; transition: opacity 0.15s ease; }
+
+/* ── Evolutionary Path / Fishbone shared tooltip ── */
+.evo-tooltip {
+  position: fixed; z-index: 9999; pointer-events: none;
+  width: 280px;
+  background: var(--paper-bg, #0d1b2e);
+  border: 1px solid var(--border, #1e3a5f);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.evo-tip-card {
+  display: flex; flex-direction: column; gap: 4px;
+  background: var(--paper-zh, #0f2744);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.evo-tip-label {
+  font-family: 'IBM Plex Sans', sans-serif; font-weight: 700;
+  font-size: 14px; color: var(--text, #e2e8f0);
+}
+.evo-tip-note {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 13px; color: var(--text-muted, #94a3b8);
+  line-height: 1.6; white-space: normal; word-break: break-all;
+}
+.evo-tip-edge {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 12px; color: var(--text-muted, #64748b);
+  padding: 0 4px; text-align: center;
+}
+
+/* ── 15. Fishbone SVG ── */
+.fishbone-svg {
+  display: block;
+  width: 100%;
+  max-width: 760px;
+  height: auto;
+  margin: 0 auto;
+  overflow: visible;
+}
+.fb-effect   { font-size: 12px; font-family: 'IBM Plex Sans', sans-serif; font-weight: 700; }
+.fb-category { font-size: 11px; font-family: 'IBM Plex Sans', sans-serif; font-weight: 700; }
+
+/* ── 16. Abstract ── */
+.abstract-block { margin-bottom: 1.5rem; }
+.abstract-meta  { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+.abstract-body  {
+  background: var(--paper-zh); border-left: 3px solid var(--border);
+  padding: 0.7rem 1rem; border-radius: 0 6px 6px 0; font-size: 0.9rem; line-height: 1.85; color: var(--text);
+}
+
+/* ── 17. Responsive ── */
+@media (max-width: 900px) {
+  .pair                   { grid-template-columns: 1fr; }
+  .sum-grid               { grid-template-columns: 1fr; }
+  .fig-wrap--square       { float: none; width: 100%; margin-left: 0; }
+  .fig-wrap--tall         { width: 100%; }
+}

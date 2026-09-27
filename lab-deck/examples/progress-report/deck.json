@@ -1,0 +1,147 @@
+{
+  "style": {
+    "nav": "single",
+    "density": "balanced"
+  },
+  "chapters": [
+    "問題背景",
+    "概念提案",
+    "目前進度",
+    "後續方向",
+    "參考文獻"
+  ],
+  "cover": {
+    "title": "研究進度報告範例",
+    "byline": "報告人．Lab Meeting 進度報告"
+  },
+  "slides": [
+    {
+      "type": "content",
+      "chapter": "問題背景",
+      "tag": "一、資料解析度不足",
+      "kind": "problem",
+      "full": [
+        "現有資料以固定大小的網格為單位，無法描述不規則的實際範圍。"
+      ],
+      "short": [
+        "資料以固定網格為單位",
+        "無法描述不規則範圍"
+      ],
+      "one_line": "固定網格無法描述實際範圍",
+      "figs": [
+        {
+          "id": "Figure 1",
+          "caption": "網格資料示意"
+        }
+      ]
+    },
+    {
+      "type": "content",
+      "chapter": "問題背景",
+      "tag": "二、缺少移動方向",
+      "kind": "problem",
+      "full": [
+        "快照資料只記錄人數，看不出人從哪裡來。"
+      ],
+      "short": [
+        "只有人數",
+        "沒有移動方向"
+      ],
+      "one_line": "快照看不出人從哪裡來",
+      "figs": [
+        {
+          "id": "Figure 2",
+          "caption": "時間 t"
+        },
+        {
+          "id": "Figure 3",
+          "caption": "時間 t+1"
+        }
+      ]
+    },
+    {
+      "type": "mapping",
+      "chapter": "概念提案",
+      "pairs": [
+        [
+          "資料解析度不足",
+          "以可達範圍重新切分"
+        ],
+        [
+          "缺少移動方向",
+          "引入外部 OD 資料"
+        ]
+      ]
+    },
+    {
+      "type": "content",
+      "chapter": "概念提案",
+      "tag": "一、以可達範圍重新切分",
+      "kind": "solution",
+      "full": [
+        "以實際可達範圍取代固定網格，重新分配人數。"
+      ],
+      "short": [
+        "以可達範圍取代網格"
+      ],
+      "one_line": "用可達範圍取代固定網格",
+      "figs": [
+        {
+          "id": "Figure 4",
+          "caption": "可達範圍示意"
+        }
+      ]
+    },
+    {
+      "type": "content",
+      "chapter": "目前進度",
+      "tag": "目前計算方式",
+      "kind": "neutral",
+      "one_line": "三種計算方式的比較",
+      "figs": [
+        {
+          "id": "Figure 5",
+          "caption": "方法 A"
+        },
+        {
+          "id": "Figure 6",
+          "caption": "方法 B"
+        },
+        {
+          "id": "Figure 7",
+          "caption": "方法 C"
+        }
+      ]
+    },
+    {
+      "type": "split",
+      "chapter": "後續方向",
+      "tag": "應用與限制",
+      "good_title": "應用",
+      "bad_title": "限制",
+      "good": [
+        [
+          "活動管理參考",
+          "評估大型活動的人潮範圍"
+        ]
+      ],
+      "bad": [
+        [
+          "資料年份",
+          "不同年份的資料可能不一致"
+        ]
+      ]
+    },
+    {
+      "type": "refs",
+      "chapter": "參考文獻",
+      "refs": [
+        {
+          "title": "A Fast and Accurate Method for Estimating People Flow from Spatiotemporal Population Data",
+          "source": "Akagi et al., IJCAI 2018",
+          "gist": "以三個因子估計網格間的人流。"
+        }
+      ]
+    }
+  ]
+}
