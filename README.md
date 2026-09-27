@@ -6,8 +6,9 @@
 |---|---|---|
 | **標注檔** | 自己讀：雙欄英中對照、技術高亮、逐段批註的網頁 | `2annotate` |
 | **簡報** | 給別人聽：實驗室風格的可編輯 .pptx | `2slide` |
+| **兩者都要** | 先標注、再從同一份 paper.json 做簡報 | `both` |
 
-預設兩者都產，也可以只產其中一個。有產出簡報時，會一併附上「顏色 → 概念」對照表，方便之後手動修改時沿用同一套配色。
+只丟論文時由 `both` 兩者都產，也可以直接叫用其中一個。有產出簡報時，會一併附上「顏色 → 概念」對照表，方便之後手動修改時沿用同一套配色。
 
 ## 簡報風格
 
@@ -21,9 +22,9 @@
 
 ## 安裝
 
-**claude.ai**：到 [Releases](../../releases) 下載 `2slide.skill` 與 `2annotate.skill`，在「設定 → Capabilities → Skills」上傳。
+**claude.ai**：到 [Releases](../../releases) 下載 `2slide.skill`、`2annotate.skill`、`both.skill`，在「設定 → Capabilities → Skills」上傳。
 
-**Claude Code**：整個 repo 是一個 plugin，安裝後兩個 skill 分別是 `/readout:2slide` 與 `/readout:2annotate`。
+**Claude Code**：整個 repo 是一個 plugin，安裝後三個 skill 分別是 `/readout:2slide`、`/readout:2annotate`、`/readout:both`。
 
 ```bash
 claude plugin marketplace add k7term1a/readout
@@ -68,6 +69,7 @@ uv run scripts/package_skills.py   # 輸出 dist/*.skill
 skills/
   2slide/                SKILL.md、references/（style、narratives、spec）、scripts/build_deck.py、assets/
   2annotate/             SKILL.md、scripts/generate.py、assets/style.css、references/
+  both/                  SKILL.md（分派：先 2annotate、再 2slide）
 examples/                示範用的 deck.json（圖片一律使用佔位框）
 tests/                   建置測試
 ```

@@ -1,7 +1,7 @@
 {
   "name": "readout",
   "version": "0.2.0",
-  "description": "論文 → 雙欄批註網頁（2annotate）＋實驗室風格的可編輯簡報（2slide）",
+  "description": "論文 → 雙欄批註網頁（2annotate）＋實驗室風格的可編輯簡報（2slide），或兩者一起（both）",
   "author": {"name": "k7term1a"},
   "repository": "https://github.com/k7term1a/readout"
 }

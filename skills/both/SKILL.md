@@ -1,0 +1,43 @@
+---
+name: both
+description: >
+  論文報告一條龍：丟進一篇論文，同時產出「標注檔」（2annotate 的雙欄批註網頁，給自己讀）
+  與「Lab Meeting 簡報」（2slide 的可編輯 .pptx，給別人聽），兩份共用同一份 paper.json 與圖片命名。
+  當使用者上傳論文並說「幫我準備報告」「整理＋做簡報」「lab meeting 要報這篇」，
+  或只丟論文、沒說要哪一種時，務必使用此 skill。
+  只要批註網頁時改用 2annotate；只要簡報時改用 2slide。
+---
+
+# both
+
+一篇論文進來，依序產出兩種東西：
+
+| 產出 | 給誰 | 做法 |
+|---|---|---|
+| **標注檔** | 自己讀 | 依 **2annotate** skill 的 SKILL.md 產出 paper.json、tables/、generate.py、style.css |
+| **簡報** | 給別人聽 | 依 **2slide** skill 的 SKILL.md 寫 deck.json，渲染成 .pptx |
+
+兩個 skill 以 plugin 安裝時就在同一層（`../2annotate/`、`../2slide/`）；在 claude.ai 上則是各自上傳的 skill。
+找不到其中一個時，告訴使用者需要安裝哪一個，先完成另一個。
+
+## 1. 決定要產出什麼
+
+| 使用者的說法 | 產出 |
+|---|---|
+| 只丟論文，或說「整理＋做簡報」「準備報告」 | 兩者都產 |
+| 「只要批註」「整理這篇我自己看」 | 只產標注檔（照 2annotate 做即可） |
+| 「只要簡報」「直接做投影片」 | 只產簡報（照 2slide 做即可） |
+
+沒講清楚就兩者都產，不要先停下來問。簡報的導覽列、密度、故事線照 2slide 的預設。
+
+## 2. 先標注，再做簡報
+
+1. 完整依 2annotate 的 SKILL.md 產出標注檔。
+2. 簡報從 **paper.json** 取材，不要重讀 PDF：兩份產出的內容、術語、圖表編號才會一致
+   （對照方式見 2slide 的 `references/narratives.md`）。
+3. 兩份產出共用同一個 `figures/` 資料夾與命名方式（`figures/figure_1.png`），使用者截一次圖兩邊都能用。
+
+## 3. 回報
+
+交付順序：標注檔 → .pptx → deck.json。簡報部分的回報照 2slide 第 6 節（一定要附色彩與概念對照表）。
+建議使用者先看標注檔把論文讀懂、把截圖放進 `figures/`，再重新建置一次簡報。

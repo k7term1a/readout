@@ -1,23 +1,17 @@
 ---
 name: 2slide
 description: >
-  論文報告一條龍：丟進一篇論文，預設同時產出「標注檔」（2annotate 的雙欄批註網頁，給自己讀）
-  與「Lab Meeting 簡報」（可編輯 .pptx，給別人聽），也可以只產其中一個。簡報依使用者實驗室的兩種風格：
+  Lab Meeting 簡報產生器：把論文（或研究進度）做成可編輯的 .pptx 初稿，依使用者實驗室的兩種風格：
   單排導覽列（章節即故事線、「/ 彩色標籤」、左文右圖）與雙排導覽列（通用章節＋子章節嵌在橘線上、
-  黑字標題、紅色結論橫條、漸進聚焦、截圖標註），密度可選文字型／平衡型／圖像型。
-  只要使用者上傳論文要報告、提到 lab meeting、實驗室報告、論文報告簡報、進度報告、導讀幾篇論文，
-  或要調整這類簡報的導覽列、密度、配色，就務必使用此 skill。
-  只要批註網頁、不要簡報時，也由此 skill 分派給 2annotate。
+  黑字標題、點一下出現的結論橫條、漸進聚焦、截圖標註、自己整理的架構圖、時間軸），密度可選文字型／平衡型／圖像型。
+  當使用者要做簡報、投影片、lab meeting、實驗室報告、論文報告簡報、進度報告、導讀幾篇論文，
+  或要調整這類簡報的導覽列、密度、配色、動畫時，務必使用此 skill。
+  若使用者同時要雙欄批註網頁和簡報（例如只丟論文說「幫我準備報告」），改用 both skill。
 ---
 
 # 2slide
 
-一篇論文進來，產出兩種東西：
-
-| 產出 | 給誰 | 做法 |
-|---|---|---|
-| **標注檔** | 自己讀 | 依 `2annotate` 的 SKILL.md 產出 paper.json、tables/、generate.py、style.css |
-| **簡報** | 給別人聽 | 寫 deck.json，用 `scripts/build_deck.py` 渲染成 .pptx |
+把內容寫成 deck.json，用 `scripts/build_deck.py` 渲染成可編輯的 .pptx。
 
 簡報是**初稿**：使用者拿到後會自己在 PowerPoint 裡修改。所以可編輯性比精緻度重要（見第 5 節）。
 
@@ -27,16 +21,9 @@ description: >
 - `references/spec.md`：deck.json 欄位與建置指令。
 - `assets/example-deck.json`：完整範例。
 
-## 1. 決定要產出什麼
+## 1. 確認風格
 
-| 使用者的說法 | 產出 |
-|---|---|
-| 只丟論文，或說「整理＋做簡報」「準備報告」 | 兩者都產 |
-| 「只要批註」「整理這篇我自己看」 | 只產標注檔 |
-| 「只要簡報」「直接做投影片」 | 只產簡報 |
-
-沒講清楚就用預設（兩者都產），不要先停下來問。有做簡報時，還要確認下列三項，
-使用者沒指定就用預設值，並在回報裡說明可以切換：
+使用者沒指定就用預設值，不要先停下來問，並在回報裡說明可以切換：
 
 | 項目 | 選項 | 預設 |
 |---|---|---|
@@ -44,15 +31,13 @@ description: >
 | 密度 | `text`／`balanced`／`visual` | `single` 配 `balanced`、`double` 配 `visual` |
 | 故事線 | 單篇論文／研究進度／多篇導讀 | 依素材判斷 |
 
-## 2. 先做標注（兩者都產時）
+## 2. 取材
 
-先完整依 `2annotate` 的 SKILL.md 產出標注檔。簡報再從 **paper.json** 取材，不要重讀 PDF：
-這樣兩份產出的內容、術語、圖表編號才會一致。
-
-**只產簡報時**，仍在工作資料夾建立 paper.json 當中間檔（可以只寫 `meta`、`summary`、
-主要段落與 `tables/`），但不交付 generate.py 和 style.css。
-
-兩份產出共用同一個 `figures/` 資料夾與命名方式（`figures/figure_1.png`），使用者截一次圖兩邊都能用。
+- 工作資料夾已經有 **paper.json**（2annotate 產出的標注檔）時，從它取材，不要重讀 PDF，
+  這樣兩份產出的內容、術語、圖表編號才會一致。對照方式見 `references/narratives.md`。
+- 沒有 paper.json 時，先從 PDF 整理出一份當中間檔（可以只寫 `meta`、`summary`、主要段落與 `tables/`），
+  再寫 deck.json；中間檔不必交付。
+- 截圖放在 `figures/`，命名 `figures/figure_1.png`，和 2annotate 共用同一套命名。
 
 ## 3. 寫 deck.json
 
@@ -79,7 +64,7 @@ description: >
 ## 4. 建置與檢查
 
 ```bash
-pip show python-pptx >/dev/null 2>&1 || pip install python-pptx   # 需要時加 --break-system-packages
+pip install -q "python-pptx>=1.0" pillow lxml   # 需要時加 --break-system-packages
 python <skill-dir>/scripts/build_deck.py deck.json -o <name>.pptx
 ```
 
@@ -103,7 +88,7 @@ python <skill-dir>/scripts/build_deck.py deck.json -o <name>.pptx
 
 ## 6. 回報
 
-交付順序：標注檔（若有）→ .pptx → deck.json。回報內容保持簡短。
+交付順序：.pptx → deck.json（由 both 呼叫時，標注檔先交付）。回報內容保持簡短。
 
 **有產生簡報時，一定要附上色彩與概念對照表**，讓使用者修改時能沿用同一套配色。
 建置時會印出「色彩對照」表（紅、綠與各概念色的色碼、代表內容、頁碼），直接貼上，

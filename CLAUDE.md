@@ -5,9 +5,10 @@
 ## 這個專案在做什麼
 
 `readout`：一條「論文 → 標注檔＋簡報」的流程。repo 本身是一個 Claude Code plugin（`.claude-plugin/`），
-底下有兩個 skill（claude.ai 則是各自上傳 `dist/*.skill`）：
+底下有三個 skill（claude.ai 則是各自上傳 `dist/*.skill`）：
 - `skills/2annotate`：產出 paper.json、tables/、generate.py、style.css，讓使用者在本機產生雙欄批註網頁。這是使用者原本就寫好的 skill。
-- `skills/2slide`：統一分派流程；把內容寫成 deck.json，再由 `scripts/build_deck.py`（python-pptx）渲染成 .pptx。
+- `skills/2slide`：只做簡報；把內容寫成 deck.json，再由 `scripts/build_deck.py`（python-pptx）渲染成 .pptx。
+- `skills/both`：分派用，兩者都要時先跑 2annotate、再從 paper.json 跑 2slide。
 
 簡報是**初稿**，使用者會自己在 PowerPoint 裡再修改，所以**可編輯性比精緻度重要**：
 文字放在文字方塊、架構圖用原生圖形繪製並組成群組、命名，不要把內容壓成圖片。
