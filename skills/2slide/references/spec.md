@@ -6,7 +6,7 @@
 1. 頂層欄位
 2. 導覽列與章節
 3. 內容頁（content）與三種密度
-4. 其他頁型（mapping / split / refs / statement）
+4. 其他頁型（mapping / split / refs / statement / diagram）
 5. 圖片與表格
 6. 概念色
 7. 主題覆寫
@@ -128,6 +128,47 @@
 **refs**：參考文獻頁，每筆是 `{title, source, gist}`；`visual` 密度不顯示 `gist`。
 
 **statement**：置中大字（例如一句結論）。`{"type": "statement", "text": "…", "chapter": "選填"}`
+
+**diagram**：報告者自己整理的概念架構圖，一頁滿版（不受密度影響；`full`／`short` 會放進講者備註）。
+架構寫在頂層 `diagrams`，各頁用名稱引用，同一張圖可以跨頁沿用：
+
+```json
+"diagrams": {
+  "vlm": {
+    "direction": "right",
+    "nodes": [
+      {"id": "img",  "label": "輸入影像", "col": 1, "row": 1, "image": "figures/input.png"},
+      {"id": "txt",  "label": "輸入文字", "col": 1, "row": 2},
+      {"id": "venc", "label": "Image Encoder", "col": 2, "row": 1, "concept": "圖像層級"},
+      {"id": "tenc", "label": "Text Encoder",  "col": 2, "row": 2},
+      {"id": "fuse", "label": "Fusion", "col": 3, "row": [1, 2]}
+    ],
+    "edges": [["img", "venc"], ["txt", "tenc"], ["venc", "fuse"], ["tenc", "fuse", "拼接"]],
+    "modules": [{"id": "enc", "label": "Encoder", "nodes": ["venc", "tenc"]}]
+  }
+},
+"slides": [
+  {"type": "diagram", "chapter": "介紹", "section": "過往研究", "tag": "…", "title": "過往研究：晚期融合",
+   "diagram": "vlm", "conclusion": "兩個模態只在最後才融合，互動不足"},
+  {"type": "diagram", "chapter": "研究方法", "section": "核心概念", "tag": "…", "title": "本文方法",
+   "diagram": "vlm", "highlight": ["fuse"], "relabel": {"fuse": "Cross-Attention Fusion"}}
+]
+```
+
+- **節點**：`id`、`label`、`col`、`row`（從 1 開始；`[1, 2]` 表示跨兩列／兩欄）。方塊大小依頁面自動計算。
+  `concept` 套用概念色；`image` 在方塊上半部放縮圖（找不到檔案時畫虛線佔位並警告）。`label` 可以用 `{{概念}}`。
+- **連線**：`[from, to]` 或 `[from, to, 標籤]`，也可以寫成 `{"from", "to", "label", "dashed": true}`。
+  一律是 PowerPoint 連接線、黏在方塊上：對齊時是直線，否則是直角折線（`direction: "right"` 先水平、
+  `"down"` 先垂直）；轉折點自動避開模組框。在 PowerPoint 裡拖動方塊，箭頭會跟著走。
+- **模組框**：`modules: [{"id", "label", "nodes"}]`，虛線圓角框住這些節點，左上角放標題。
+- **每頁的變化**（位置永遠依整張圖計算，所以跨頁不會移動）：
+  - `highlight`：節點或模組的 id，加綠色描邊（`6AA84F`）與淺綠底（`D9EAD3`），表示新增或有變化。
+  - `hide`：先藏起還沒介紹的節點，連到它們的線也一起藏起。
+  - `relabel`：`{"id": "新文字"}`，換掉某個節點的文字。
+- 可以加 `conclusion`（點一下出現），`--keyframes` 同樣適用。
+- 整張圖組成群組「架構圖」；節點命名 `架構圖/<id>`，連線 `架構圖/連線/<from>-<to>`，模組框 `架構圖/模組/<id>`。
+- 欄列太多、方塊會太小時會警告，請拆成兩頁或減少節點。
+- 色彩對照表會多一列「綠色描邊」，列出本份簡報標綠的元件。
 
 ## 5. 圖片與表格
 

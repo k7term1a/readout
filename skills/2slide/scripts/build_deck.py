@@ -37,7 +37,7 @@ DEFAULT_THEME = {
         "problem": "E06666", "solution": "8CD96A", "neutral": "1085DE", "muted": "8A8A8A",
         "good_bg": "D9EAD3", "good_fg": "274E13", "bad_bg": "F4CCCC", "bad_fg": "990000",
         "tint": "EEF5FC", "ph_bg": "F3F6FA", "ph_line": "9FB3C8", "ph_text": "5A6B7D", "todo": "E69138",
-        "mark": "FF0000",
+        "mark": "FF0000", "new_line": "6AA84F", "new_bg": "D9EAD3", "node_line": "7F7F7F", "edge": "595959",
         "concept1_bg": "B6CFF5", "concept1_fg": "3C78D8", "concept2_bg": "FFECB3", "concept2_fg": "BF9000",
         "concept3_bg": "D9D2E9", "concept3_fg": "674EA7", "concept4_bg": "D0E0E3", "concept4_fg": "45818E",
     },
@@ -755,6 +755,28 @@ class Deck:
                      align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE, min_size=24, label=label)
         self.notes(s, d.get("notes"))
 
+    # ------------------------------------------------------------ diagram (the presenter's own concept diagram)
+    def s_diagram(self, d, label):
+        """Full-page native diagram: nodes on a col/row grid, elbow connectors glued to nodes, module frames."""
+        spec = d.get("diagram")
+        if isinstance(spec, str):
+            name, spec = spec, (self.spec.get("diagrams") or {}).get(spec)
+            if spec is None:
+                WARN.append(f"[{label}] diagram '{name}' is not defined in top-level diagrams — skipped")
+                return
+        spec = spec or {}
+        s = self.slide()
+        self.nav(s, d.get("chapter"), d.get("section"))
+        self.heading(s, d)
+        top = self.body_top
+        bottom = H - 0.6
+        if d.get("conclusion") and self.conclusion_pos(d) == "bottom":
+            bottom = H - 0.5 - BAR_H - 0.2
+        DiagramLayout(self, s, spec, d, label).draw(MARGIN, top, W - 2 * MARGIN, bottom - top)
+        if d.get("conclusion"):
+            self.conclusion(s, d, label)
+        self.notes(s, d.get("notes") or as_list(d.get("full") or d.get("short")))
+
     def build(self):
         self.s_cover(self.spec.get("cover", {}))
         for i, d in enumerate(self.spec.get("slides", []), start=2):
@@ -793,6 +815,10 @@ class Deck:
                 names = u["mapping"] or u["names"]
                 rows.append({"color": label, "hex": hexes, "meaning": f"{what}：" + "／".join(names),
                              "pages": sorted(u["pages"])})
+        u = self.uses.get("new")
+        if u:
+            rows.append({"color": "綠色描邊", "hex": [self.C["new_line"], self.C["new_bg"]],
+                         "meaning": "架構圖中新增或有變化的元件：" + "／".join(u["names"]), "pages": sorted(u["pages"])})
         for name, slot in sorted(self.concepts.items(), key=lambda kv: kv[1]):
             u = self.uses.get(f"concept:{name}")
             if u:
@@ -800,6 +826,281 @@ class Deck:
                              "hex": [self.C[f"concept{slot}_bg"], self.C[f"concept{slot}_fg"]],
                              "meaning": name, "pages": sorted(u["pages"])})
         return rows
+
+
+# ---------------------------------------------------------------- diagram layout
+def span(v):
+    """1 -> (1, 1); [2, 3] -> (2, 3)"""
+    if isinstance(v, (list, tuple)):
+        return int(v[0]), int(v[-1])
+    return int(v), int(v)
+
+
+class DiagramLayout:
+    """Grid layout for a diagram spec: {direction, nodes, edges, modules}. Coordinates in inches."""
+
+    SITE = {"top": 0, "left": 1, "bottom": 2, "right": 3}  # connection sites of rect / roundRect
+
+    def __init__(self, deck, slide, spec, d, label):
+        self.deck, self.s, self.label = deck, slide, label
+        self.direction = spec.get("direction", "right")
+        hide = set(d.get("hide", []))
+        relabel = d.get("relabel", {})
+        self.highlight = set(d.get("highlight", []))
+        self.all_nodes = spec.get("nodes", [])  # the grid is sized from every node, hidden or not
+        self.nodes = [{**n, "label": relabel.get(n["id"], n.get("label", n["id"]))}
+                      for n in self.all_nodes if n.get("id") not in hide]
+        ids = {n["id"] for n in spec.get("nodes", [])}
+        for x in self.highlight | hide | set(relabel):
+            if x not in ids and x not in {m.get("id") for m in spec.get("modules", [])}:
+                WARN.append(f"[{label}] diagram has no node or module '{x}'")
+        shown = {n["id"] for n in self.nodes}
+        self.edges = []
+        for e in spec.get("edges", []):
+            e = e if isinstance(e, dict) else {"from": e[0], "to": e[1], "label": e[2] if len(e) > 2 else None}
+            if e["from"] not in ids or e["to"] not in ids:
+                WARN.append(f"[{label}] diagram edge {e['from']}→{e['to']} refers to an unknown node — skipped")
+            elif e["from"] in shown and e["to"] in shown:
+                self.edges.append(e)
+        self.modules_all = spec.get("modules", [])
+        self.modules = [m for m in self.modules_all if any(i in shown for i in m.get("nodes", []))]
+        self.box = {}  # id -> (x, y, w, h)
+        self.shape = {}  # id -> pptx shape
+
+    def draw(self, ax, ay, aw, ah):
+        if not self.nodes:
+            WARN.append(f"[{self.label}] diagram has no nodes")
+            return
+        ncols = max(span(n.get("col", 1))[1] for n in self.all_nodes)
+        nrows = max(span(n.get("row", 1))[1] for n in self.all_nodes)
+        has_img = any(n.get("image") for n in self.all_nodes)
+        framed = bool(self.modules_all)
+        pad = 0.35 if framed else 0.0  # room for module frames and their titles
+        ax, ay, aw, ah = ax + pad, ay + pad, aw - 2 * pad, ah - 2 * pad
+        cw, ch = aw / ncols, ah / nrows
+        # with frames, widen the gaps along the flow so connector bends fall between a frame and the next node
+        extra = 0.45 if framed else 0
+        gx = min(1.1, max(0.55, cw * 0.32)) + (extra if self.direction != "down" else 0)
+        gy = min(0.9, max(0.4, ch * 0.3)) + (extra if self.direction == "down" else 0)
+        nw = min(cw - gx, 3.0)
+        nh = min(ch - gy, 2.4 if has_img else 1.1)
+        if nw < 1.0 or nh < 0.4:
+            WARN.append(f"[{self.label}] diagram grid {ncols}×{nrows} is too dense for one slide — split it")
+            nw, nh = max(nw, 0.8), max(nh, 0.4)
+        for n in self.all_nodes:
+            c0, c1 = span(n.get("col", 1))
+            r0, r1 = span(n.get("row", 1))
+            w = nw + (c1 - c0) * cw
+            h = nh + (r1 - r0) * ch
+            cx = ax + (c0 - 1 + (c1 - c0 + 1) / 2) * cw
+            cy = ay + (r0 - 1 + (r1 - r0 + 1) / 2) * ch
+            self.box[n["id"]] = (cx - w / 2, cy - h / 2, w, h)
+        drawn = []
+        for m in self.modules:
+            drawn += self.module(m)
+        for n in self.nodes:
+            drawn += self.node(n)
+        for e in self.edges:
+            drawn += self.edge(e)
+        grp = self.s.shapes.add_group_shape(drawn)
+        grp.name = "架構圖"
+
+    # -------------------------------------------------------------- parts
+    def module(self, m):
+        dk = self.deck
+        boxes = [self.box[i] for i in m.get("nodes", []) if i in self.box]
+        x0 = min(b[0] for b in boxes) - 0.2
+        y0 = min(b[1] for b in boxes) - (0.42 if m.get("label") else 0.2)
+        x1 = max(b[0] + b[2] for b in boxes) + 0.2
+        y1 = max(b[1] + b[3] for b in boxes) + 0.2
+        new = m.get("id") in self.highlight
+        fr = dk.shape(self.s, MSO_SHAPE.ROUNDED_RECTANGLE, x0, y0, x1 - x0, y1 - y0,
+                      fill="new_bg" if new else None, line="new_line" if new else "node_line", radius=0.06,
+                      dash=True)
+        fr.name = f"架構圖/模組/{m.get('id') or m.get('label', '')}"
+        out = [fr]
+        if new:
+            dk.use("new", dk.plain(m.get("label") or m.get("id")))
+        if m.get("label"):
+            t = dk.textbox(self.s, x0 + 0.15, y0 + 0.06, x1 - x0 - 0.3, 0.3, m["label"], size=12,
+                           color="new_line" if new else "muted", bold=True)
+            t.name = f"架構圖/模組/{m.get('id') or m['label']}/標題"
+            out.append(t)
+        return out
+
+    def node(self, n):
+        dk, (x, y, w, h) = self.deck, self.box[n["id"]]
+        slot = dk.concept_slot(n.get("concept"), self.label)
+        new = n["id"] in self.highlight
+        fill = "new_bg" if new else (f"concept{slot}_bg" if slot else "FFFFFF")
+        line = "new_line" if new else (f"concept{slot}_fg" if slot else "node_line")
+        sh = dk.shape(self.s, MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h, fill=fill, line=line, radius=0.12)
+        sh.line.width = Pt(2.25 if new else 1.25)
+        sh.name = f"架構圖/{n['id']}"
+        if new:
+            dk.use("new", dk.plain(n["label"]))
+        self.shape[n["id"]] = sh
+        out = [sh]
+        img = n.get("image")
+        text_top, text_h = y, h
+        if img:
+            pth = Path(img)
+            pth = pth if pth.is_absolute() else dk.base / pth
+            ih = h * 0.62
+            if pth.exists():
+                from PIL import Image
+                with Image.open(pth) as im:
+                    ar = im.width / im.height
+                pw, ph = min(w - 0.2, (ih - 0.15) * ar), min(ih - 0.15, (w - 0.2) / ar)
+                pic = self.s.shapes.add_picture(str(pth), Inches(x + (w - pw) / 2), Inches(y + 0.1),
+                                                Inches(pw), Inches(ph))
+                pic.name = f"架構圖/{n['id']}/縮圖"
+                out.append(pic)
+            else:
+                WARN.append(f"[{self.label}] diagram node '{n['id']}' image missing: {img} — placeholder drawn")
+                ph = dk.shape(self.s, MSO_SHAPE.RECTANGLE, x + 0.15, y + 0.1, w - 0.3, ih - 0.15, fill="ph_bg",
+                              line="ph_line", dash=True)
+                ph.name = f"架構圖/{n['id']}/縮圖"
+                out.append(ph)
+            text_top, text_h = y + ih, h - ih
+        size = 16
+        text = dk.plain(n["label"])
+        while size > 11 and est_height([{"t": text}], size, w - 0.2, 0, False) > text_h - 0.05:
+            size -= 1
+        if est_height([{"t": text}], size, w - 0.2, 0, False) > text_h + 0.05:
+            WARN.append(f"[{self.label}] diagram node '{n['id']}' label is too long for its box")
+        if img:
+            t = dk.textbox(self.s, x + 0.1, text_top, w - 0.2, text_h, n["label"], size=size, color="dark",
+                           bold=True, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE, space=0)
+            t.name = f"架構圖/{n['id']}/文字"
+            out.append(t)
+        else:  # label lives in the node itself so it moves and resizes with it
+            tf = sh.text_frame
+            tf.word_wrap, tf.vertical_anchor = True, MSO_ANCHOR.MIDDLE
+            tf.margin_left = tf.margin_right = Inches(0.08)
+            tf.margin_top = tf.margin_bottom = 0
+            para = tf.paragraphs[0]
+            para.alignment = PP_ALIGN.CENTER
+            for seg, hl, concept in dk.segments(n["label"]):
+                r = para.add_run()
+                r.text = seg
+                dk.style(r, size, "dark", True)
+                if concept is not None:
+                    r.font.color.rgb = dk.rgb(f"concept{dk.concepts[concept]}_fg")
+        return out
+
+    def edge(self, e):
+        dk = self.deck
+        a, b = self.box[e["from"]], self.box[e["to"]]
+        (ac0, ac1), (bc0, bc1) = span(self.node_of(e["from"]).get("col", 1)), span(self.node_of(e["to"]).get("col", 1))
+        (ar0, ar1), (br0, br1) = span(self.node_of(e["from"]).get("row", 1)), span(self.node_of(e["to"]).get("row", 1))
+        if self.direction == "down":
+            horizontal = not (br0 > ar1 or br1 < ar0)  # same row band -> sideways
+        else:
+            horizontal = bc0 > ac1 or bc1 < ac0  # different columns -> left/right
+        if horizontal:
+            fwd = b[0] > a[0]
+            s1, s2 = ("right", "left") if fwd else ("left", "right")
+            p1 = (a[0] + a[2] if fwd else a[0], a[1] + a[3] / 2)
+            p2 = (b[0] if fwd else b[0] + b[2], b[1] + b[3] / 2)
+        else:
+            fwd = b[1] > a[1]
+            s1, s2 = ("bottom", "top") if fwd else ("top", "bottom")
+            p1 = (a[0] + a[2] / 2, a[1] + a[3] if fwd else a[1])
+            p2 = (b[0] + b[2] / 2, b[1] if fwd else b[1] + b[3])
+        if abs(p1[0] - p2[0]) < 0.02 or abs(p1[1] - p2[1]) < 0.02:  # aligned -> straight
+            p2 = (p1[0], p2[1]) if not horizontal else (p2[0], p1[1])
+            c = self.s.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(p1[0]), Inches(p1[1]),
+                                            Inches(p2[0]), Inches(p2[1]))
+        elif horizontal:  # horizontal-first Z: python-pptx handles the flips
+            c = self.s.shapes.add_connector(MSO_CONNECTOR.ELBOW, Inches(p1[0]), Inches(p1[1]),
+                                            Inches(p2[0]), Inches(p2[1]))
+            set_bend(c, self.bend(e, p1[0], p2[0], s1, s2))
+        else:  # vertical-first Z: a bentConnector3 rotated 90° clockwise
+            c = self.s.shapes.add_connector(MSO_CONNECTOR.ELBOW, 0, 0, Inches(1), Inches(1))
+            vertical_elbow(c, p1, p2)
+            set_bend(c, self.bend(e, p1[1], p2[1], s1, s2))
+        c.line.color.rgb = dk.rgb(e.get("color", "edge"))
+        c.line.width = Pt(1.5)
+        if e.get("dashed"):
+            c.line.dash_style = MSO_LINE.DASH
+        etree.SubElement(c.line._get_or_add_ln(), qn("a:tailEnd")).set("type", "triangle")
+        etree.SubElement(c._element.spPr, qn("a:effectLst"))
+        glue(c, self.shape[e["from"]], self.SITE[s1], self.shape[e["to"]], self.SITE[s2])
+        c.name = f"架構圖/連線/{e['from']}-{e['to']}"
+        out = [c]
+        if e.get("label"):
+            # on the last segment (the one entering the target), which is never shared with sibling edges
+            tw = label_w(dk.plain(e["label"])) + 0.2
+            if horizontal:
+                mx = p2[0] - (p2[0] - (p1[0] + p2[0]) / 2) / 2
+                t = dk.textbox(self.s, mx - tw / 2, p2[1] - 0.34, tw, 0.3, e["label"], size=12, color="muted",
+                               align=PP_ALIGN.CENTER)
+            else:
+                my = p2[1] - (p2[1] - (p1[1] + p2[1]) / 2) / 2
+                t = dk.textbox(self.s, p2[0] + 0.08, my - 0.15, tw, 0.3, e["label"], size=12, color="muted")
+            t.name = f"架構圖/連線/{e['from']}-{e['to']}/標籤"
+            out.append(t)
+        return out
+
+    def frame_margin(self, node_id, side):
+        """How far a module frame reaches out from this node on the given side (0 if the node is unframed)."""
+        for m in self.modules:
+            if node_id in m.get("nodes", []):
+                return 0.42 if side == "top" and m.get("label") else 0.2
+        return 0.0
+
+    def bend(self, e, a, b, s1, s2):
+        """Fraction along the flow where a Z connector turns: the middle of the gap left free by frames."""
+        a2 = a + (self.frame_margin(e["from"], s1) + 0.05) * (1 if b > a else -1)
+        b2 = b - (self.frame_margin(e["to"], s2) + 0.05) * (1 if b > a else -1)
+        if (b2 - a2) * (b - a) <= 0:  # frames eat the whole gap: fall back to the middle
+            return 0.5
+        return ((a2 + b2) / 2 - a) / (b - a)
+
+    def node_of(self, i):
+        return next(n for n in self.nodes if n["id"] == i)
+
+
+def set_bend(c, frac):
+    """Position of the middle segment of a bentConnector3, as a fraction of the way from its start."""
+    av = c._element.spPr.find(qn("a:prstGeom")).find(qn("a:avLst"))
+    if av is None:
+        av = etree.SubElement(c._element.spPr.find(qn("a:prstGeom")), qn("a:avLst"))
+    for g in list(av):
+        av.remove(g)
+    gd = etree.SubElement(av, qn("a:gd"))
+    gd.set("name", "adj1")
+    gd.set("fmla", f"val {int(round(frac * 100000))}")
+
+
+def vertical_elbow(c, p1, p2):
+    """Make connector c a vertical-first elbow from p1 to p2 (inches) by rotating a bentConnector3 90° cw."""
+    (x1, y1), (x2, y2) = p1, p2
+    dx, dy = x2 - x1, y2 - y1
+    w, h = abs(dy), abs(dx)
+    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+    xfrm = c._element.spPr.find(qn("a:xfrm"))
+    for k in ("flipH", "flipV"):
+        xfrm.attrib.pop(k, None)
+    xfrm.set("rot", "5400000")
+    if dy < 0:
+        xfrm.set("flipH", "1")
+    if dx > 0:
+        xfrm.set("flipV", "1")
+    xfrm.find(qn("a:off")).set("x", str(int(Inches(cx - w / 2))))
+    xfrm.find(qn("a:off")).set("y", str(int(Inches(cy - h / 2))))
+    xfrm.find(qn("a:ext")).set("cx", str(int(Inches(w))))
+    xfrm.find(qn("a:ext")).set("cy", str(int(Inches(h))))
+
+
+def glue(c, a, site_a, b, site_b):
+    """Record connector endpoints as glued to shapes (so PowerPoint reroutes when a node is dragged)."""
+    cnv = c._element.find(qn("p:nvCxnSpPr")).find(qn("p:cNvCxnSpPr"))
+    for tag, shp, idx in (("a:stCxn", a, site_a), ("a:endCxn", b, site_b)):
+        el = etree.SubElement(cnv, qn(tag))
+        el.set("id", str(shp.shape_id))
+        el.set("idx", str(idx))
 
 
 # ---------------------------------------------------------------- helpers

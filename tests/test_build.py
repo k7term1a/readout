@@ -495,3 +495,146 @@ def test_bad_marks_warn(tmp_path, mark, needle):
 def test_small_annotated_figure_warns(tmp_path):
     mark_slide(tmp_path, [{"type": "note", "x": 0.1, "y": 0.1, "text": "說明"}], density="text")
     assert any("only" in w and "wide" in w for w in bd.WARN)
+
+
+# ---------------------------------------------------------------- diagrams
+DIAGRAM = {
+    "direction": "right",
+    "nodes": [{"id": "a", "label": "A", "col": 1, "row": 1}, {"id": "b", "label": "B", "col": 1, "row": 2},
+              {"id": "c", "label": "C", "col": 2, "row": [1, 2]}, {"id": "d", "label": "D", "col": 3, "row": 1}],
+    "edges": [["a", "c"], ["b", "c", "合併"], ["c", "d"]],
+    "modules": [{"id": "m", "label": "模組", "nodes": ["a", "b"]}],
+}
+
+
+def diagram_slide(tmp_path, nav="double", diagram=None, **extra):
+    spec = concept_spec([{"type": "diagram", "chapter": "甲", "tag": "t", "title": "架構", "diagram": "g", **extra}])
+    spec["diagrams"] = {"g": diagram or DIAGRAM}
+    return build(tmp_path, spec, nav)[1]
+
+
+def emu_box(sh):
+    return sh.left, sh.top, sh.width, sh.height
+
+
+def test_diagram_is_one_named_group(tmp_path):
+    sl = diagram_slide(tmp_path)
+    (grp,) = [sh for sh in sl.shapes if sh.shape_type == 6]
+    assert grp.name == "架構圖"
+    n = by_name(sl)
+    assert {"架構圖/a", "架構圖/b", "架構圖/c", "架構圖/d", "架構圖/模組/m", "架構圖/連線/a-c"} <= set(n)
+    a, b, c, dd = (n[f"架構圖/{i}"] for i in "abcd")
+    assert a.left == b.left < c.left < dd.left and a.top < b.top  # grid order
+    assert near(c.top + c.height / 2, (a.top + b.top + b.height) / 2)  # spanning node centred on its rows
+    assert n["架構圖/c"].text_frame.text == "C"  # label lives in the node shape
+
+
+def cxn(sh):
+    nv = sh._element.find(bd.qn("p:nvCxnSpPr")).find(bd.qn("p:cNvCxnSpPr"))
+    st, en = nv.find(bd.qn("a:stCxn")), nv.find(bd.qn("a:endCxn"))
+    return (int(st.get("id")), int(st.get("idx"))), (int(en.get("id")), int(en.get("idx")))
+
+
+def connector_ends(sh):
+    """Visual start/end (EMU) of a straight or bent connector, honouring rot=90° and flips."""
+    x = sh._element.spPr.find(bd.qn("a:xfrm"))
+    off, ext = x.find(bd.qn("a:off")), x.find(bd.qn("a:ext"))
+    w, h = int(ext.get("cx")), int(ext.get("cy"))
+    cx, cy = int(off.get("x")) + w / 2, int(off.get("y")) + h / 2
+    su, sv = (w / 2 if x.get("flipH") == "1" else -w / 2), (h / 2 if x.get("flipV") == "1" else -h / 2)
+    pts = [(su, sv), (-su, -sv)]
+    if x.get("rot") == "5400000":
+        pts = [(-v, u) for u, v in pts]
+    return [(cx + u, cy + v) for u, v in pts]
+
+
+def test_edges_glued_to_node_sides(tmp_path):
+    n = by_name(diagram_slide(tmp_path))
+    a, c = n["架構圖/a"], n["架構圖/c"]
+    e = n["架構圖/連線/a-c"]
+    assert cxn(e) == ((a.shape_id, 3), (c.shape_id, 1))  # right side -> left side
+    (x1, y1), (x2, y2) = connector_ends(e)
+    assert abs(x1 - (a.left + a.width)) < 2000 and abs(y1 - (a.top + a.height / 2)) < 2000
+    assert abs(x2 - c.left) < 2000 and abs(y2 - (c.top + c.height / 2)) < 2000
+    tail = e._element.spPr.find(bd.qn("a:ln")).find(bd.qn("a:tailEnd"))
+    assert tail.get("type") == "triangle"
+
+
+def test_down_direction_uses_vertical_first_elbows(tmp_path):
+    g = {"direction": "down",
+         "nodes": [{"id": "top", "label": "T", "col": [1, 3], "row": 1}, {"id": "l", "label": "L", "col": 1, "row": 2},
+                   {"id": "r", "label": "R", "col": 3, "row": 2}],
+         "edges": [["top", "l"], ["top", "r"]]}
+    n = by_name(diagram_slide(tmp_path, diagram=g))
+    top, left, right = n["架構圖/top"], n["架構圖/l"], n["架構圖/r"]
+    for tgt, name in ((left, "top-l"), (right, "top-r")):
+        e = n[f"架構圖/連線/{name}"]
+        assert cxn(e) == ((top.shape_id, 2), (tgt.shape_id, 0))  # bottom -> top
+        assert e._element.spPr.find(bd.qn("a:xfrm")).get("rot") == "5400000"
+        (x1, y1), (x2, y2) = connector_ends(e)
+        assert abs(y1 - (top.top + top.height)) < 2000 and abs(y2 - tgt.top) < 2000
+        assert abs(x2 - (tgt.left + tgt.width / 2)) < 2000
+
+
+def test_bend_clears_module_frame(tmp_path):
+    n = by_name(diagram_slide(tmp_path))
+    frame, e = n["架構圖/模組/m"], n["架構圖/連線/a-c"]
+    (x1, _), (x2, _) = connector_ends(e)
+    adj = e._element.spPr.find(bd.qn("a:prstGeom")).find(bd.qn("a:avLst"))[0].get("fmla")
+    bend_x = x1 + int(adj.split()[1]) / 100000 * (x2 - x1)
+    assert frame.left + frame.width < bend_x < x2  # turns after leaving the frame
+
+
+def test_hide_keeps_layout_and_drops_edges(tmp_path):
+    full = by_name(diagram_slide(tmp_path))
+    part = by_name(diagram_slide(tmp_path, hide=["d"]))
+    assert "架構圖/d" not in part and "架構圖/連線/c-d" not in part
+    for i in "abc":
+        assert near(part[f"架構圖/{i}"].left, full[f"架構圖/{i}"].left)
+        assert near(part[f"架構圖/{i}"].top, full[f"架構圖/{i}"].top)
+
+
+def test_highlight_relabel_and_colour_table(tmp_path):
+    spec = concept_spec([{"type": "diagram", "chapter": "甲", "title": "t", "diagram": "g",
+                          "highlight": ["c", "m"], "relabel": {"c": "新融合"}}])
+    spec["diagrams"] = {"g": DIAGRAM}
+    rows = bd.render(spec, tmp_path, "visual", "double", str(tmp_path / "o.pptx"))
+    n = by_name(Presentation(str(tmp_path / "o.pptx")).slides[1])
+    c = n["架構圖/c"]
+    assert c.text_frame.text == "新融合"
+    assert str(c.line.color.rgb) == C["new_line"] and str(c.fill.fore_color.rgb) == C["new_bg"]
+    assert str(n["架構圖/模組/m"].line.color.rgb) == C["new_line"]
+    green = next(r for r in rows if r["color"] == "綠色描邊")
+    assert "新融合" in green["meaning"] and green["pages"] == [2]
+
+
+def test_node_thumbnail_and_concept(tmp_path):
+    from PIL import Image
+    Image.new("RGB", (40, 30), "red").save(tmp_path / "x.png")
+    g = {"nodes": [{"id": "i", "label": "輸入", "col": 1, "row": 1, "image": "x.png"},
+                   {"id": "k", "label": "K", "col": 2, "row": 1, "concept": "圖像層級"}], "edges": [["i", "k"]]}
+    n = by_name(diagram_slide(tmp_path, diagram=g))
+    assert n["架構圖/i/縮圖"].shape_type == 13 and n["架構圖/i/文字"].text_frame.text == "輸入"
+    assert str(n["架構圖/k"].fill.fore_color.rgb) == C["concept1_bg"]
+
+
+@pytest.mark.parametrize("extra, diagram, needle", [
+    ({"diagram": "nope"}, None, "not defined"),
+    ({"highlight": ["zz"]}, None, "no node or module 'zz'"),
+    ({}, {"nodes": [{"id": "a", "col": 1, "row": 1}], "edges": [["a", "q"]]}, "unknown node"),
+    ({}, {"nodes": [{"id": str(i), "col": i, "row": 1} for i in range(1, 12)]}, "too dense"),
+])
+def test_diagram_warnings(tmp_path, extra, diagram, needle):
+    spec = concept_spec([{"type": "diagram", "chapter": "甲", "title": "t", "diagram": "g", **extra}])
+    spec["diagrams"] = {"g": diagram or DIAGRAM}
+    build(tmp_path, spec, "double")
+    assert any(needle in w for w in bd.WARN), bd.WARN
+
+
+def test_diagram_with_conclusion_keyframes(tmp_path):
+    spec = concept_spec([{"type": "diagram", "chapter": "甲", "title": "t", "diagram": "g", "conclusion": "晚期融合"}])
+    spec["diagrams"] = {"g": DIAGRAM}
+    out = tmp_path / "kf.pptx"
+    bd.render(spec, tmp_path, "visual", "double", str(out), keyframes=True)
+    before, after = list(Presentation(str(out)).slides)[1:]
+    assert not named(before, "結論橫條") and named(after, "結論橫條")

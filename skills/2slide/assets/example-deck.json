@@ -41,6 +41,89 @@
     "聚集分數": 2,
     "距離衰減": 3
   },
+  "diagrams": {
+    "three_factor": {
+      "direction": "right",
+      "nodes": [
+        {
+          "id": "snap",
+          "label": "網格人口快照",
+          "col": 1,
+          "row": [
+            1,
+            3
+          ]
+        },
+        {
+          "id": "dep",
+          "label": "出發機率",
+          "col": 2,
+          "row": 1,
+          "concept": "出發機率"
+        },
+        {
+          "id": "att",
+          "label": "聚集分數",
+          "col": 2,
+          "row": 2,
+          "concept": "聚集分數"
+        },
+        {
+          "id": "dist",
+          "label": "距離衰減",
+          "col": 2,
+          "row": 3,
+          "concept": "距離衰減"
+        },
+        {
+          "id": "flow",
+          "label": "格間流量",
+          "col": 3,
+          "row": [
+            1,
+            3
+          ]
+        }
+      ],
+      "edges": [
+        [
+          "snap",
+          "dep"
+        ],
+        [
+          "snap",
+          "att"
+        ],
+        [
+          "snap",
+          "dist"
+        ],
+        [
+          "dep",
+          "flow"
+        ],
+        [
+          "att",
+          "flow"
+        ],
+        [
+          "dist",
+          "flow"
+        ]
+      ],
+      "modules": [
+        {
+          "id": "model",
+          "label": "三因子模型",
+          "nodes": [
+            "dep",
+            "att",
+            "dist"
+          ]
+        }
+      ]
+    }
+  },
   "cover": {
     "title": "只看人口快照，能推回人怎麼流動嗎？",
     "subtitle": "A Fast and Accurate Method for Estimating People Flow from Spatiotemporal Population Data — IJCAI 2018",
@@ -221,6 +304,17 @@
       "section": "三因子模型"
     },
     {
+      "type": "diagram",
+      "chapter": "方法提案",
+      "section": "三因子模型",
+      "tag": "三因子模型的架構",
+      "title": "三因子模型的架構",
+      "diagram": "three_factor",
+      "notes": [
+        "從快照出發，三個因子各自估計，再組合成格間流量。"
+      ]
+    },
+    {
       "type": "content",
       "chapter": "方法提案",
       "tag": "三、參數少、算得快",
@@ -315,6 +409,23 @@
         ]
       ],
       "section": "對我的研究"
+    },
+    {
+      "type": "diagram",
+      "chapter": "討論啟發",
+      "section": "對我的研究",
+      "tag": "套用到我的研究",
+      "title": "套用到我的研究：換掉距離衰減",
+      "diagram": "three_factor",
+      "relabel": {
+        "dist": "路網可達時間"
+      },
+      "highlight": [
+        "dist"
+      ],
+      "notes": [
+        "沿用同一張架構，只把距離衰減換成路網可達時間（綠框）。這是報告者的構想，請確認。"
+      ]
     },
     {
       "type": "refs",
