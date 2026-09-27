@@ -772,29 +772,70 @@ def test_focus_on_screenshot_region(tmp_path):
     Image.new("RGB", (900, 300), "white").save(tmp_path / "f.png")
     fig = {"id": "Figure 3", "path": "f.png",
            "regions": [{"id": "a", "x": 0, "y": 0, "w": 1 / 3, "h": 1}, {"id": "b", "x": 1 / 3, "y": 0, "w": 1 / 3, "h": 1}],
-           "marks": [{"type": "box", "x": 0.8, "y": 0.2, "w": 0.1, "h": 0.2},
-                     {"type": "box", "x": 0.1, "y": 0.2, "w": 0.1, "h": 0.2}]}
+           "marks": [{"type": "box", "x": 0.8, "y": 0.2, "w": 0.1, "h": 0.2}]}
     spec = concept_spec([{"type": "content", "chapter": "甲", "title": "t", "one_line": "y", "figs": [fig],
                           "focus": [{"on": "a"}, {"on": "b"}]}])
     out = tmp_path / "f.pptx"
     bd.render(spec, tmp_path, "visual", "double", str(out))
-    overview, on_a, on_b = list(Presentation(str(out)).slides)[1:]
+    pages = list(Presentation(str(out)).slides)[1:]
+    overview, on_a = pages[0], pages[1]
     assert not [sh for sh in flat_shapes(overview.shapes) if sh.name.startswith("聚焦/")]
     n = by_name(on_a)
     pic = picture(on_a)
     veils = [sh for name, sh in n.items() if name.startswith("聚焦/Figure 3/遮罩")]
     assert veils and all(alpha_of(v) == (100 - bd.FADE_ALPHA) * 1000 for v in veils)
-    # the lit third (left) is not covered by any veil
-    lit_right = pic.left + pic.width / 3
+    lit_right = pic.left + pic.width / 3  # the lit third (left) is not covered by any veil
     assert all(v.left >= lit_right - 2000 or v.top >= pic.top + pic.height - 2000 for v in veils)
-    # a mark inside region a stays; one outside fades
-    assert not faded(n["標註/Figure 3/紅框2"]) and alpha_of(n["標註/Figure 3/紅框1"], ("a:ln", "a:solidFill", "a:srgbClr")) < 100000
+    # red boxes are single-slide call-outs: never drawn on any page of a focus sequence
+    assert not any(name.startswith("標註/") for p in pages for name in by_name(p))
+    assert any("not drawn on progressive-focus pages" in w for w in bd.WARN)
 
 
-def test_more_than_three_clicks_warns(tmp_path):
-    marks = [{"type": "box", "x": 0.1 * k, "y": 0.1, "w": 0.05, "h": 0.05} for k in range(1, 5)]
-    mark_slide(tmp_path, marks, reveal="click")
-    assert any("click animations on one slide" in w for w in bd.WARN)
+def box(k, **extra):
+    return {"type": "box", "x": 0.1 * k, "y": 0.1, "w": 0.05, "h": 0.05, **extra}
+
+
+def test_annotation_groups_capped_at_three(tmp_path):
+    mark_slide(tmp_path, [box(k) for k in range(1, 5)], reveal="click")
+    assert any("4 annotations" in w for w in bd.WARN)
+    # appear + disappear is one group, and with_previous joins the previous group
+    mark_slide(tmp_path, [box(1, exit=True), box(2, exit=True), box(3), box(4, with_previous=True)],
+               reveal="click")
+    assert not any("annotations" in w for w in bd.WARN)
+
+
+def exit_targets(slide):
+    return [int(next(c.iter(bd.qn("p:spTgt"))).get("spid"))
+            for c in slide._element.iter(bd.qn("p:cTn")) if c.get("presetClass") == "exit"]
+
+
+def test_exit_fades_out_on_the_next_click(tmp_path):
+    sl = mark_slide(tmp_path, [box(1, exit=True), box(2)], reveal="click")
+    n = by_name(sl)
+    b1, b2 = n["標註/Table 2/紅框1"], n["標註/Table 2/紅框2"]
+    clicks = [c for c in sl._element.iter(bd.qn("p:cTn")) if c.get("presetClass")]
+    assert [(c.get("presetClass"), c.get("nodeType")) for c in clicks] == [
+        ("entr", "clickEffect"), ("exit", "clickEffect"), ("entr", "withEffect")]
+    assert exit_targets(sl) == [b1.shape_id]
+    # the last mark leaving gets a click of its own
+    sl = mark_slide(tmp_path, [box(1), box(2, exit=True)], reveal="click")
+    n = by_name(sl)
+    assert exit_targets(sl) == [n["標註/Table 2/紅框2"].shape_id]
+    assert sum(1 for c in sl._element.iter(bd.qn("p:cTn")) if c.get("nodeType") == "clickEffect") == 3
+
+
+def test_exit_keyframes(tmp_path):
+    spec = mark_spec(tmp_path, [box(1, exit=True), box(2)], reveal="click")
+    out = tmp_path / "kf.pptx"
+    bd.render(spec, tmp_path, "visual", "double", str(out), keyframes=True)
+    frames = list(Presentation(str(out)).slides)[1:]
+    has = lambda f, k: any(sh.name == f"標註/Table 2/紅框{k}" for sh in flat_shapes(f.shapes))
+    assert [(has(f, 1), has(f, 2)) for f in frames] == [(False, False), (True, False), (False, True)]
+
+
+def test_exit_without_reveal_warns(tmp_path):
+    mark_slide(tmp_path, [box(1, exit=True)])
+    assert any("'exit' needs" in w for w in bd.WARN)
 
 
 def test_single_nav_shows_focus_subtitle_next_to_tag(tmp_path):

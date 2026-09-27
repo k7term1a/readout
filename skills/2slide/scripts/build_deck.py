@@ -31,7 +31,7 @@ VEIL_ALPHA = 70  # % opacity of the white veil that fades the content when the c
 BAND_ALPHA = 45  # % opacity of a concept band laid over a screenshot
 FADE_ALPHA = 30  # % opacity left on parts that are out of focus (style.md: ~70% transparent)
 FADE_TEXT = "C0C0C0"
-MAX_CLICKS = 3  # more click animations than this on one slide get hard to edit by hand
+MAX_MARKS = 3  # annotation groups (red box, band, note; appear+disappear counts once) per slide
 FOCUS_KEYS = ("title", "subtitle", "tag", "kind", "one_line", "short", "full", "notes",
               "conclusion", "conclusion_kind", "conclusion_pos")
 NOTE_SIDES = ("right", "left", "top", "bottom", "inside")
@@ -92,6 +92,9 @@ class Deck:
         self.steps = []
         self.focus = None  # id lit on the current focus page (None = nothing faded)
         self.focus_hit = False
+        self.in_focus_seq = False
+        self.pending_out = []
+        self.mark_units = 0
         self.prs = Presentation()
         self.prs.slide_width, self.prs.slide_height = Inches(W), Inches(H)
         self.body_top = 1.95 if nav_style == "single" else 2.2
@@ -114,8 +117,18 @@ class Deck:
     def slide(self):
         sl = self.prs.slides.add_slide(self.prs.slide_layouts[6])
         self.page = len(self.prs.slides)
-        self.steps = []  # click steps on this slide: [[shape_id, ...], ...]
+        self.steps = []  # click steps on this slide: [{"in": [ids], "out": [ids]}, ...]
+        self.pending_out = []  # shapes that fade out on the next click (marks with "exit": true)
+        self.mark_units = 0
         return sl
+
+    def add_step(self, ids, merge=False):
+        """One click: fade in `ids` (and fade out whatever an earlier mark asked to leave on this click)."""
+        if merge and self.steps:
+            self.steps[-1]["in"].extend(ids)
+            return
+        self.steps.append({"in": list(ids), "out": self.pending_out})
+        self.pending_out = []
 
     # ------------------------------------------------------------ marks & colour usage
     def use(self, key, name=None, source="names"):
@@ -328,6 +341,11 @@ class Deck:
     def figure(self, s, x, y, w, h, fig, label):
         fig = norm_fig(fig)
         marks = fig.get("marks") or []
+        if marks and self.in_focus_seq:
+            # a focus sequence walks through the figure; red boxes & co. are single-slide call-outs
+            WARN.append(f"[{label}] marks on {fig.get('id') or 'figure'} are not drawn on progressive-focus pages "
+                        "— put them on their own slide")
+            marks = []
         n0 = len(s.shapes)
         gut = mark_gutters(marks, w, h)
         x, y = x + gut["left"], y + gut["top"]
@@ -336,13 +354,14 @@ class Deck:
         if marks and rect[2] < 3.5:
             WARN.append(f"[{label}] annotated {fig.get('id') or 'figure'} is only {rect[2]:.1f}in wide — "
                         "use balanced/visual density or a smaller text_ratio")
-        mark_geo = self.marks(s, rect, fig, gut, label) if marks else []
-        self.focus_figure(s, rect, fig, mark_geo, n0, label)
+        if marks:
+            self.marks(s, rect, {**fig, "marks": marks}, gut, label)
+        self.focus_figure(s, rect, fig, n0, label)
         if marks and fig.get("reveal") != "click":  # animated marks must stay ungrouped (PowerPoint rule)
             grp = s.shapes.add_group_shape(list(s.shapes)[n0:])
             grp.name = f"標註/{fig.get('id') or '圖'}"
 
-    def focus_figure(self, s, rect, fig, mark_geo, n0, label):
+    def focus_figure(self, s, rect, fig, n0, label):
         """On a focus page: keep one region (or the whole figure) bright and veil the rest of the screenshot."""
         if not self.focus:
             return
@@ -365,12 +384,6 @@ class Deck:
                                    fill="FFFFFF")
                     set_alpha(v, 100 - FADE_ALPHA)
                     v.name = f"{name}/遮罩{k + 1}"
-            for (gx, gy, gw, gh), ids in mark_geo:  # marks outside the region fade too
-                cx, cy = gx + gw / 2, gy + gh / 2
-                if not (fx <= cx <= fx + fw and fy <= cy <= fy + fh):
-                    for sh in s.shapes:
-                        if sh.shape_id in ids:
-                            fade(sh)
         elif self.focus == fid:
             self.focus_hit = True  # the whole figure is the lit block
         else:  # another figure (or diagram part) is lit: fade this whole figure
@@ -478,15 +491,16 @@ class Deck:
                     side_items[side].append(item)
                 else:
                     WARN.append(f"[{label}] {name} mark {k}: side must be one of {NOTE_SIDES}")
-            groups.append((m, ids, (fx, fy, fw, fh)))
+            groups.append((m, ids))
         self.place_side_labels(s, rect, gut, side_items, name)
+        self.mark_units += sum(1 for m, _ in groups if not m.get("with_previous"))
         if reveal:
-            for m, ids, _ in groups:
-                if m.get("with_previous") and self.steps:
-                    self.steps[-1].extend(ids)
-                else:
-                    self.steps.append(ids)
-        return [(geo, set(ids)) for _, ids, geo in groups]
+            for m, ids in groups:
+                self.add_step(ids, merge=bool(m.get("with_previous")))
+                if m.get("exit"):  # appear on this click, disappear on the next one (one group, not two)
+                    self.pending_out = self.pending_out + ids
+        elif any(m.get("exit") for m, _ in groups):
+            WARN.append(f"[{label}] {name}: 'exit' needs \"reveal\": \"click\" on the figure — ignored")
 
     def note_label(self, s, item, tx, ty, tw, name, align=PP_ALIGN.LEFT, anchor_pt=None):
         """Text box at (tx, ty) plus, for notes, an arrow from the box edge to the target point."""
@@ -621,7 +635,7 @@ class Deck:
         r = p.add_run()
         r.text = text
         self.style(r, size, "FFFFFF", bold=True)
-        self.steps.append([veil.shape_id, bar.shape_id])
+        self.add_step([veil.shape_id, bar.shape_id])
 
     def key_point(self, s, x, y, w, h, text):
         self.shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h, fill="tint", radius=0.12)
@@ -994,32 +1008,48 @@ class Deck:
             if not on:
                 WARN.append(f"[{label}] focus step {k} has no 'on' — skipped")
                 continue
-            page = {**inherit, **{x: st[x] for x in FOCUS_KEYS if x in st}, "_focus": on}
+            page = {**inherit, **{x: st[x] for x in FOCUS_KEYS if x in st}, "_focus": on, "_focus_seq": True}
             pages.append(page)
+        if pages and pages[0] is base:
+            pages[0] = {**base, "_focus_seq": True}
         return pages
 
     def render_page(self, fn, d, label):
         self.focus, self.focus_hit = d.get("_focus"), False
+        self.in_focus_seq = bool(d.get("_focus_seq"))
         fn(d, label)
+        self.close_steps()
         if self.focus and not self.focus_hit:
             WARN.append(f"[{label}] focus '{self.focus}' matches no diagram node/module or figure region here")
         steps = self.steps
-        if len(steps) > MAX_CLICKS:
-            WARN.append(f"[{label}] {len(steps)} click animations on one slide (keep it to {MAX_CLICKS}) — "
-                        "split the slide or drop reveal")
+        if self.mark_units > MAX_MARKS:
+            WARN.append(f"[{label}] {self.mark_units} annotations (red boxes / bands / notes) on one slide — "
+                        f"keep it to {MAX_MARKS}; split the slide")
         if steps and self.keyframes:
-            # one slide per click: frame k shows the first k steps (the slide is rebuilt identically)
-            drop_shapes(self.prs.slides[-1], [i for st in steps for i in st])
+            # one slide per click: frame k shows what is visible after k clicks (the slide is rebuilt identically)
+            def hidden_after(k):
+                later_in = [i for st in steps[k:] for i in st["in"]]
+                gone = [i for st in steps[:k] for i in st["out"]]
+                return later_in + gone
+            drop_shapes(self.prs.slides[-1], hidden_after(0))
             self.page_number(self.prs.slides[-1])
             for k in range(1, len(steps) + 1):
                 fn(d, label)
-                drop_shapes(self.prs.slides[-1], [i for st in steps[k:] for i in st])
+                self.close_steps()
+                drop_shapes(self.prs.slides[-1], hidden_after(k))
                 self.page_number(self.prs.slides[-1])
         else:
             if steps:
                 click_steps(self.prs.slides[-1], steps)
             self.page_number(self.prs.slides[-1])
         self.focus = None
+        self.in_focus_seq = False
+
+    def close_steps(self):
+        """A mark that should disappear after the last click gets one more click of its own."""
+        if self.pending_out:
+            self.steps.append({"in": [], "out": self.pending_out})
+            self.pending_out = []
 
 
     def color_table(self):
@@ -1468,7 +1498,8 @@ def drop_shapes(slide, shape_ids):
 
 
 def click_steps(slide, steps):
-    """Add a PowerPoint timing tree: each step fades in on one click (first shape on click, the rest with it)."""
+    """PowerPoint timing tree: on each click the step's "in" shapes fade in and its "out" shapes fade out
+    (the first effect is on click, the rest run with it)."""
     def el(parent, tag, **attrs):
         e = etree.SubElement(parent, f"{{{P_NS}}}{tag}")
         for k, v in attrs.items():
@@ -1482,36 +1513,52 @@ def click_steps(slide, steps):
     seq = el(el(root, "childTnLst"), "seq", concurrent="1", nextAc="seek")
     main = el(seq, "cTn", id=next(ids), dur="indefinite", nodeType="mainSeq")
     clicks = el(main, "childTnLst")
-    for shape_ids in steps:
+    steps = [st if isinstance(st, dict) else {"in": st, "out": []} for st in steps]
+    for stp in steps:
         click = el(el(clicks, "par"), "cTn", id=next(ids), fill="hold")
         el(el(click, "stCondLst"), "cond", delay="indefinite")
         step = el(el(el(click, "childTnLst"), "par"), "cTn", id=next(ids), fill="hold")
         el(el(step, "stCondLst"), "cond", delay="0")
         effects = el(step, "childTnLst")
-        for k, spid in enumerate(shape_ids):
-            eff = el(el(effects, "par"), "cTn", id=next(ids), presetID="10", presetClass="entr",
-                     presetSubtype="0", fill="hold", grpId="0", nodeType="clickEffect" if k == 0 else "withEffect")
-            el(el(eff, "stCondLst"), "cond", delay="0")
-            beh = el(eff, "childTnLst")
-            st = el(beh, "set")
-            cb = el(st, "cBhvr")
-            vis = el(cb, "cTn", id=next(ids), dur="1", fill="hold")
-            el(el(vis, "stCondLst"), "cond", delay="0")
-            el(el(cb, "tgtEl"), "spTgt", spid=spid)
-            el(el(cb, "attrNameLst"), "attrName").text = "style.visibility"
-            el(el(st, "to"), "strVal", val="visible")
-            fcb = el(el(beh, "animEffect", transition="in", filter="fade"), "cBhvr")
-            el(fcb, "cTn", id=next(ids), dur="500")
-            el(el(fcb, "tgtEl"), "spTgt", spid=spid)
+        k = 0
+        for kind, shape_ids in (("out", stp.get("out", [])), ("in", stp.get("in", []))):
+            for spid in shape_ids:
+                entr = kind == "in"
+                eff = el(el(effects, "par"), "cTn", id=next(ids), presetID="10",
+                         presetClass="entr" if entr else "exit", presetSubtype="0", fill="hold",
+                         grpId="0" if entr else "1", nodeType="clickEffect" if k == 0 else "withEffect")
+                k += 1
+                el(el(eff, "stCondLst"), "cond", delay="0")
+                beh = el(eff, "childTnLst")
+                if entr:
+                    st = el(beh, "set")
+                    cb = el(st, "cBhvr")
+                    vis = el(cb, "cTn", id=next(ids), dur="1", fill="hold")
+                    el(el(vis, "stCondLst"), "cond", delay="0")
+                    el(el(cb, "tgtEl"), "spTgt", spid=spid)
+                    el(el(cb, "attrNameLst"), "attrName").text = "style.visibility"
+                    el(el(st, "to"), "strVal", val="visible")
+                fcb = el(el(beh, "animEffect", transition="in" if entr else "out", filter="fade"), "cBhvr")
+                el(fcb, "cTn", id=next(ids), dur="500")
+                el(el(fcb, "tgtEl"), "spTgt", spid=spid)
+                if not entr:  # hide once the fade-out has finished
+                    st = el(beh, "set")
+                    cb = el(st, "cBhvr")
+                    vis = el(cb, "cTn", id=next(ids), dur="1", fill="hold")
+                    el(el(vis, "stCondLst"), "cond", delay="499")
+                    el(el(cb, "tgtEl"), "spTgt", spid=spid)
+                    el(el(cb, "attrNameLst"), "attrName").text = "style.visibility"
+                    el(el(st, "to"), "strVal", val="hidden")
     for tag, evt in (("prevCondLst", "onPrev"), ("nextCondLst", "onNext")):
         el(el(el(seq, tag), "cond", evt=evt, delay="0"), "tgtEl", ).append(etree.Element(f"{{{P_NS}}}sldTgt"))
     # build entries only for text-capable shapes (p:sp), as PowerPoint writes them
     sp_ids = {sh.shape_id for sh in slide.shapes if sh._element.tag == qn("p:sp")}
     bld = el(timing, "bldLst")
-    for shape_ids in steps:
-        for spid in shape_ids:
-            if spid in sp_ids:
-                el(bld, "bldP", spid=spid, grpId="0", animBg="1")
+    for kind, grp in (("in", "0"), ("out", "1")):
+        for stp in steps:
+            for spid in stp.get(kind, []):
+                if spid in sp_ids:
+                    el(bld, "bldP", spid=spid, grpId=grp, animBg="1")
 
 
 def text_w(t, size):

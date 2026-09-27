@@ -212,7 +212,7 @@
   頁面本身的 `conclusion` 只出現在全貌頁，不會複製到每一步。
 - `"focus_overview": false` 可以省略全貌頁。
 - 每一步的說明建議寫在 `subtitle`：雙排顯示在標題下方；單排（只有「/ 標籤」）在聚焦頁會顯示在標籤右側。
-- 一頁的點擊動畫超過 3 個會警告（結論橫條、`reveal` 的標註都算）。
+- 聚焦頁不畫截圖標註（`marks`）：標註是單頁重點，聚焦是展開說明，兩者分開放。
 
 ## 5. 圖片與表格
 
@@ -256,7 +256,11 @@
 - 說明文字寫在截圖旁邊，不要蓋住數值；只有圖上有空白處時才用 `inside`。
 
 **點一下出現**：圖加上 `"reveal": "click"`，每個標註依 `marks` 的順序各自點一下淡入；標註加 `"with_previous": true`
-就和上一個一起出現。同一頁有 `conclusion` 時，結論是最後一下。`--keyframes` 會拆成對應的頁數。
+就和上一個一起出現。標註加 `"exit": true` 會在**下一次點擊時淡出**（和下一個標註的出現同一下；
+若是最後一個，就多一下讓它消失）。同一頁有 `conclusion` 時，結論是最後一下。`--keyframes` 會拆成對應的頁數。
+
+**一頁最多 3 組標註**：每個標註算一組，`with_previous` 併入前一組，「出現 → 消失」也只算一組。超過會警告。
+漸進聚焦（`focus`）的頁面不會畫標註（會警告），要標重點請另開一頁。
 
 **可編輯性**：每個元件命名為 `標註/<圖號>/紅框1`、`色塊2`、`色塊2說明`、`說明3`、`說明3箭頭`。
 沒有動畫時，截圖和所有標註組成一個群組 `標註/<圖號>`，可以整組移動；有 `reveal` 時不組群組
@@ -322,7 +326,8 @@ python scripts/build_deck.py deck.json -o out.pptx --keyframes       # 不用動
 - `conclusion bar text may overflow`：結論橫條文字太長 → 縮成一句話。
 - `annotated … is only …in wide`：有標註的截圖太小 → 換密度或調 `text_ratio`。
 - `mark N: …`：標註的類型、座標或 `side` 寫錯。
-- `N click animations on one slide`：點擊動畫超過 3 個 → 拆頁，或拿掉部分 `reveal`。
+- `N annotations … on one slide`：標註超過 3 組 → 拆頁。
+- `marks … are not drawn on progressive-focus pages`：聚焦頁上的標註被略過 → 另開一頁放標註。
 - `focus '…' matches no …`：`focus` 的 `on` 在這頁找不到對應的節點、模組或截圖區塊。
 - `image missing`：找不到圖 → 補圖，或保留佔位並在回報中列出。
 - `only N figures fit`：圖太多 → 拆頁。
