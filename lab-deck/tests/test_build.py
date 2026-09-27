@@ -373,3 +373,125 @@ def test_concept_frame_around_real_image(tmp_path):
     pic = next(sh for sh in slide.shapes if sh.shape_type == 13)  # picture
     assert str(frame.line.color.rgb) == C["concept1_fg"]
     assert frame.left < pic.left and frame.left + frame.width > pic.left + pic.width
+
+
+# ---------------------------------------------------------------- screenshot marks
+def mark_spec(tmp_path, marks, density="visual", **fig_extra):
+    from PIL import Image
+    Image.new("RGB", (1200, 640), "white").save(tmp_path / "t.png")
+    fig = {"id": "Table 2", "path": "t.png", "marks": marks, **fig_extra}
+    return concept_spec([{"type": "content", "chapter": "甲", "one_line": "y", "short": ["x"], "figs": [fig]}])
+
+
+def mark_slide(tmp_path, marks, density="visual", nav="double", **fig_extra):
+    return build(tmp_path, mark_spec(tmp_path, marks, **fig_extra), nav, density)[1]
+
+
+def flat_shapes(shapes):
+    for sh in shapes:
+        if sh.shape_type == 6:  # group
+            yield from flat_shapes(sh.shapes)
+        else:
+            yield sh
+
+
+def by_name(slide):
+    return {sh.name: sh for sh in flat_shapes(slide.shapes)}
+
+
+def picture(slide):
+    return next(sh for sh in flat_shapes(slide.shapes) if sh.shape_type == 13)
+
+
+def test_mark_geometry_rows_and_cols():
+    assert bd.mark_geometry({"type": "box", "row": 8, "rows": 8, "col": 3, "cols": 4}) == (0.5, 7 / 8, 0.25, 1 / 8)
+    assert bd.mark_geometry({"type": "band", "row": [2, 5], "rows": 8}) == (0, 1 / 8, 1, 0.5)
+    assert bd.mark_geometry({"type": "note", "x": 0.3, "y": 0.4}) == (0.3, 0.4, 0, 0)
+    assert bd.mark_geometry({"type": "box", "x": 0.3}) is None
+
+
+def test_box_sits_on_image_fractions(tmp_path):
+    sl = mark_slide(tmp_path, [{"type": "box", "x": 0.5, "y": 0.25, "w": 0.2, "h": 0.1}])
+    pic, box = picture(sl), by_name(sl)["標註/Table 2/紅框1"]
+    assert near(box.left, pic.left + 0.5 * pic.width) and near(box.top, pic.top + 0.25 * pic.height)
+    assert near(box.width, 0.2 * pic.width) and near(box.height, 0.1 * pic.height)
+    assert str(box.line.color.rgb) == "FF0000" and box.fill.type == 5  # outline only (MSO_FILL_TYPE.BACKGROUND)
+
+
+def test_band_is_translucent_concept_colour_with_outside_label(tmp_path):
+    sl = mark_slide(tmp_path, [{"type": "band", "row": [2, 5], "rows": 8, "concept": "圖像層級", "text": "相同參數量"}])
+    pic, n = picture(sl), by_name(sl)
+    band, lab = n["標註/Table 2/色塊1"], n["標註/Table 2/色塊1說明"]
+    assert str(band.fill.fore_color.rgb) == C["concept1_bg"]
+    assert band.fill._xPr.find(bd.qn("a:solidFill"))[0].find(bd.qn("a:alpha")).get("val") == str(bd.BAND_ALPHA * 1000)
+    assert near(band.width, pic.width)  # full width by default
+    assert lab.left >= pic.left + pic.width  # label outside, to the right
+    assert str(lab.text_frame.paragraphs[0].runs[0].font.color.rgb) == C["concept1_fg"]
+
+
+@pytest.mark.parametrize("side", ["right", "left", "top", "bottom"])
+def test_note_outside_with_arrow_to_point(tmp_path, side):
+    sl = mark_slide(tmp_path, [{"type": "note", "x": 0.8, "y": 0.9, "text": "用執行效率換來的", "side": side}])
+    pic, n = picture(sl), by_name(sl)
+    txt, arrow = n["標註/Table 2/說明1"], n["標註/Table 2/說明1箭頭"]
+    right, bottom = pic.left + pic.width, pic.top + pic.height
+    assert {"right": txt.left >= right, "left": txt.left + txt.width <= pic.left,
+            "top": txt.top + txt.height <= pic.top, "bottom": txt.top >= bottom}[side]
+    assert near(arrow.end_x, pic.left + 0.8 * pic.width) and near(arrow.end_y, pic.top + 0.9 * pic.height)
+
+
+def test_note_inside_sits_on_image(tmp_path):
+    sl = mark_slide(tmp_path, [{"type": "note", "x": 0.8, "y": 0.9, "text": "說明", "side": "inside",
+                                "tx": 0.4, "ty": 0.5}])
+    pic, txt = picture(sl), by_name(sl)["標註/Table 2/說明1"]
+    assert near(txt.left, pic.left + 0.4 * pic.width) and near(txt.top, pic.top + 0.5 * pic.height)
+
+
+def test_static_marks_grouped_with_image(tmp_path):
+    sl = mark_slide(tmp_path, [{"type": "box", "x": 0.1, "y": 0.1, "w": 0.1, "h": 0.1}])
+    (grp,) = [sh for sh in sl.shapes if sh.shape_type == 6]
+    assert grp.name == "標註/Table 2"
+    assert {sh.shape_type for sh in grp.shapes} >= {13}  # the picture moved into the group
+    assert not timing_targets(sl)
+
+
+def test_reveal_click_steps_in_order(tmp_path):
+    marks = [{"type": "band", "row": 2, "rows": 8, "concept": "圖像層級", "text": "A"},
+             {"type": "box", "x": 0.5, "y": 0.8, "w": 0.2, "h": 0.1},
+             {"type": "note", "x": 0.8, "y": 0.9, "text": "B", "with_previous": True}]
+    sl = mark_slide(tmp_path, marks, reveal="click")
+    assert not [sh for sh in sl.shapes if sh.shape_type == 6]  # animated marks are not grouped
+    n = by_name(sl)
+    order = [(spid, node) for spid, node, _ in timing_targets(sl)]
+    ids = lambda *names: [n[f"標註/Table 2/{x}"].shape_id for x in names]
+    assert [spid for spid, _ in order] == ids("色塊1", "色塊1說明", "紅框2", "說明3", "說明3箭頭")
+    assert [node for _, node in order] == ["clickEffect", "withEffect", "clickEffect", "withEffect", "withEffect"]
+
+
+def test_reveal_marks_then_conclusion_as_keyframes(tmp_path):
+    spec = mark_spec(tmp_path, [{"type": "box", "x": 0.1, "y": 0.1, "w": 0.1, "h": 0.1},
+                                {"type": "note", "x": 0.5, "y": 0.5, "text": "B"}], reveal="click")
+    spec["slides"][0]["conclusion"] = "結論"
+    out = tmp_path / "kf.pptx"
+    bd.render(spec, tmp_path, "visual", "double", str(out), keyframes=True)
+    frames = list(Presentation(str(out)).slides)[1:]
+    has = lambda sl, name: any(sh.name == name for sh in flat_shapes(sl.shapes))
+    assert len(frames) == 4  # nothing, +box, +note, +conclusion
+    assert [has(f, "標註/Table 2/紅框1") for f in frames] == [False, True, True, True]
+    assert [has(f, "標註/Table 2/說明2") for f in frames] == [False, False, True, True]
+    assert [has(f, "結論橫條") for f in frames] == [False, False, False, True]
+
+
+@pytest.mark.parametrize("mark, needle", [
+    ({"type": "circle", "x": 0.1, "y": 0.1}, "needs type"),
+    ({"type": "box", "x": 1.2, "y": 0.1, "w": 0.1, "h": 0.1}, "0–1 fractions"),
+    ({"type": "note", "x": 0.1, "y": 0.1, "text": "a", "side": "middle"}, "side must be"),
+])
+def test_bad_marks_warn(tmp_path, mark, needle):
+    mark_slide(tmp_path, [mark])
+    assert any(needle in w for w in bd.WARN)
+
+
+def test_small_annotated_figure_warns(tmp_path):
+    mark_slide(tmp_path, [{"type": "note", "x": 0.1, "y": 0.1, "text": "說明"}], density="text")
+    assert any("only" in w and "wide" in w for w in bd.WARN)

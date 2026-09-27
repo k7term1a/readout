@@ -28,6 +28,8 @@ W, H = 13.333, 7.5
 MARGIN = 0.9
 BAR_H = 0.62  # conclusion bar
 VEIL_ALPHA = 70  # % opacity of the white veil that fades the content when the conclusion bar appears
+BAND_ALPHA = 45  # % opacity of a concept band laid over a screenshot
+NOTE_SIDES = ("right", "left", "top", "bottom", "inside")
 
 DEFAULT_THEME = {
     "colors": {
@@ -35,6 +37,7 @@ DEFAULT_THEME = {
         "problem": "E06666", "solution": "8CD96A", "neutral": "1085DE", "muted": "8A8A8A",
         "good_bg": "D9EAD3", "good_fg": "274E13", "bad_bg": "F4CCCC", "bad_fg": "990000",
         "tint": "EEF5FC", "ph_bg": "F3F6FA", "ph_line": "9FB3C8", "ph_text": "5A6B7D", "todo": "E69138",
+        "mark": "FF0000",
         "concept1_bg": "B6CFF5", "concept1_fg": "3C78D8", "concept2_bg": "FFECB3", "concept2_fg": "BF9000",
         "concept3_bg": "D9D2E9", "concept3_fg": "674EA7", "concept4_bg": "D0E0E3", "concept4_fg": "45818E",
     },
@@ -80,6 +83,7 @@ class Deck:
         # colour key -> {"pages": set, "names": [...], "mapping": [...]} for the colour table
         self.uses = {}
         self.page = 0
+        self.steps = []
         self.prs = Presentation()
         self.prs.slide_width, self.prs.slide_height = Inches(W), Inches(H)
         self.body_top = 1.95 if nav_style == "single" else 2.2
@@ -102,6 +106,7 @@ class Deck:
     def slide(self):
         sl = self.prs.slides.add_slide(self.prs.slide_layouts[6])
         self.page = len(self.prs.slides)
+        self.steps = []  # click steps on this slide: [[shape_id, ...], ...]
         return sl
 
     # ------------------------------------------------------------ marks & colour usage
@@ -310,6 +315,23 @@ class Deck:
     # ------------------------------------------------------------ visuals
     def figure(self, s, x, y, w, h, fig, label):
         fig = norm_fig(fig)
+        marks = fig.get("marks") or []
+        n0 = len(s.shapes)
+        gut = mark_gutters(marks, w, h)
+        x, y = x + gut["left"], y + gut["top"]
+        w, h = w - gut["left"] - gut["right"], h - gut["top"] - gut["bottom"]
+        rect = self.figure_body(s, x, y, w, h, fig, label)
+        if marks and rect[2] < 3.5:
+            WARN.append(f"[{label}] annotated {fig.get('id') or 'figure'} is only {rect[2]:.1f}in wide — "
+                        "use balanced/visual density or a smaller text_ratio")
+        if marks:
+            self.marks(s, rect, fig, gut, label)
+            if fig.get("reveal") != "click":  # animated marks must stay ungrouped (PowerPoint rule)
+                grp = s.shapes.add_group_shape(list(s.shapes)[n0:])
+                grp.name = f"標註/{fig.get('id') or '圖'}"
+
+    def figure_body(self, s, x, y, w, h, fig, label):
+        """Draw the screenshot (or a placeholder) inside the cell; returns its rect (x, y, w, h)."""
         path = fig.get("path")
         cap = self.plain(f"{fig.get('id', '')}｜{fig.get('caption', '')}".strip("｜"))
         slot = self.concept_slot(fig.get("concept"), label)
@@ -335,7 +357,7 @@ class Deck:
                 if cap:
                     self.textbox(s, x, iy + ih + 0.08, w, 0.3, cap, size=11, color="muted",
                                  align=PP_ALIGN.CENTER)
-                return
+                return ix, iy, iw, ih
             WARN.append(f"[{label}] image missing or unsupported (use PNG/JPG): {path} — placeholder drawn")
         sh = self.shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h,
                         fill=f"concept{slot}_bg" if slot else "ph_bg",
@@ -350,6 +372,113 @@ class Deck:
             r = p.add_run()
             r.text = t
             self.style(r, sz, col, b)
+        return x, y, w, h
+
+    # ------------------------------------------------------------ screenshot marks
+    def marks(self, s, rect, fig, gut, label):
+        """Overlay box / band / note marks on a figure. Coordinates are 0-1 fractions of the image."""
+        rx, ry, rw, rh = rect
+        name = f"標註/{fig.get('id') or '圖'}"
+        reveal = fig.get("reveal") == "click"
+        side_items = {"left": [], "right": [], "top": [], "bottom": []}  # outside labels, placed after
+        groups = []  # shape ids per mark, for click steps
+        for k, m in enumerate(fig["marks"], start=1):
+            kind = m.get("type")
+            geo = mark_geometry(m)
+            if geo is None or kind not in ("box", "band", "note"):
+                WARN.append(f"[{label}] {name} mark {k}: needs type box/band/note and x/y (or row/col) — skipped")
+                continue
+            fx, fy, fw, fh = geo
+            if not (0 <= fx <= 1 and 0 <= fy <= 1 and fx + fw <= 1.001 and fy + fh <= 1.001):
+                WARN.append(f"[{label}] {name} mark {k}: coordinates must be 0–1 fractions of the image")
+            ax, ay, aw, ah = rx + fx * rw, ry + fy * rh, fw * rw, fh * rh
+            ids = []
+            if kind == "box":
+                b = self.shape(s, MSO_SHAPE.RECTANGLE, ax, ay, aw, ah, line=m.get("color", "mark"))
+                b.line.width = Pt(2)
+                b.name = f"{name}/紅框{k}"
+                ids.append(b.shape_id)
+            elif kind == "band":
+                slot = self.concept_slot(m.get("concept"), label)
+                bg, fg = (f"concept{slot}_bg", f"concept{slot}_fg") if slot else ("inactive", "active")
+                b = self.shape(s, MSO_SHAPE.RECTANGLE, ax, ay, aw, ah, fill=bg)
+                clr = b.fill._xPr.find(qn("a:solidFill")).find(qn("a:srgbClr"))
+                etree.SubElement(clr, qn("a:alpha")).set("val", str(BAND_ALPHA * 1000))
+                b.name = f"{name}/色塊{k}"
+                ids.append(b.shape_id)
+                if m.get("text"):
+                    side = m.get("label_side", "right")
+                    if side == "inside":
+                        t = self.textbox(s, ax + 0.08, ay, max(aw - 0.16, 0.5), ah, m["text"], size=13, color=fg,
+                                         bold=True, anchor=MSO_ANCHOR.MIDDLE)
+                        t.name = f"{name}/色塊{k}說明"
+                        ids.append(t.shape_id)
+                    elif side in side_items:
+                        side_items[side].append({"k": k, "text": m["text"], "color": fg, "ids": ids,
+                                                 "at": (ax + aw / 2, ay + ah / 2), "arrow": False,
+                                                 "tag": f"色塊{k}說明"})
+                    else:
+                        WARN.append(f"[{label}] {name} mark {k}: label_side must be one of {NOTE_SIDES}")
+            else:  # note: arrow from a one-line explanation to the point (x, y)
+                side = m.get("side", "right")
+                item = {"k": k, "text": m.get("text", ""), "color": m.get("text_color", "dark"), "ids": ids,
+                        "at": (ax, ay), "arrow": m.get("color", "mark"), "tag": f"說明{k}"}
+                if side == "inside":
+                    tx = rx + m.get("tx", min(fx + 0.1, 0.7)) * rw
+                    ty = ry + m.get("ty", max(fy - 0.15, 0.0)) * rh
+                    self.note_label(s, item, tx, ty, 2.2, name)
+                elif side in side_items:
+                    side_items[side].append(item)
+                else:
+                    WARN.append(f"[{label}] {name} mark {k}: side must be one of {NOTE_SIDES}")
+            groups.append((m, ids))
+        self.place_side_labels(s, rect, gut, side_items, name)
+        if reveal:
+            for m, ids in groups:
+                if m.get("with_previous") and self.steps:
+                    self.steps[-1].extend(ids)
+                else:
+                    self.steps.append(ids)
+
+    def note_label(self, s, item, tx, ty, tw, name, align=PP_ALIGN.LEFT, anchor_pt=None):
+        """Text box at (tx, ty) plus, for notes, an arrow from the box edge to the target point."""
+        th = 0.34 * max(1, -(-label_w(item["text"]) // max(tw, 0.5)))
+        t = self.textbox(s, tx, ty, tw, th, item["text"], size=13, color=item["color"], bold=True, align=align)
+        t.name = f"{name}/{item['tag']}"
+        item["ids"].append(t.shape_id)
+        if item["arrow"]:
+            px, py = item["at"]
+            sx, sy = anchor_pt or (tx if px < tx else tx + tw, ty + th / 2)
+            a = self.line(s, sx, sy, px, py, item["arrow"], 1.75, arrow=True)
+            a.name = f"{name}/{item['tag']}箭頭"
+            item["ids"].append(a.shape_id)
+        return th
+
+    def place_side_labels(self, s, rect, gut, side_items, name):
+        rx, ry, rw, rh = rect
+        for side, items in side_items.items():
+            if not items:
+                continue
+            if side in ("left", "right"):
+                tw = gut[side] - 0.35
+                tx = rx + rw + 0.3 if side == "right" else rx - gut[side] + 0.05
+                align = PP_ALIGN.LEFT if side == "right" else PP_ALIGN.RIGHT
+                floor = ry - 0.2
+                for it in sorted(items, key=lambda i: i["at"][1]):
+                    th = 0.34 * max(1, -(-label_w(it["text"]) // max(tw, 0.5)))
+                    ty = max(it["at"][1] - th / 2, floor)
+                    edge = tx if side == "right" else tx + tw
+                    self.note_label(s, it, tx, ty, tw, name, align, anchor_pt=(edge, ty + th / 2))
+                    floor = ty + th + 0.08
+            else:
+                ty = ry - gut["top"] if side == "top" else ry + rh + 0.4  # below the caption
+                right_edge = rx - 0.5
+                for it in sorted(items, key=lambda i: i["at"][0]):
+                    tw = min(label_w(it["text"]) + 0.1, max(rw / len(items), 1.2))
+                    tx = max(it["at"][0] - tw / 2, right_edge + 0.1, rx - 0.3)
+                    anchor = (tx + tw / 2, ty + 0.34 if side == "top" else ty)
+                    self.note_label(s, it, tx, ty, tw, name, PP_ALIGN.CENTER, anchor_pt=anchor)
+                    right_edge = tx + tw
 
     def figures(self, s, x, y, w, h, figs, label, stack=False):
         n = len(figs)
@@ -444,8 +573,7 @@ class Deck:
         r = p.add_run()
         r.text = text
         self.style(r, size, "FFFFFF", bold=True)
-        if not self.keyframes:
-            fade_in_on_click(s, [veil.shape_id, bar.shape_id])
+        self.steps.append([veil.shape_id, bar.shape_id])
 
     def key_point(self, s, x, y, w, h, text):
         self.shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h, fill="tint", radius=0.12)
@@ -500,7 +628,7 @@ class Deck:
         if d.get("date"):
             self.textbox(s, x, H - 1.05, 4, 0.45, d["date"], size=14, color="muted", anchor=MSO_ANCHOR.MIDDLE)
 
-    def s_content(self, d, label, show_conclusion=True):
+    def s_content(self, d, label):
         dens = DENSITIES[d.get("density", self.density)]
         s = self.slide()
         self.nav(s, d.get("chapter"), d.get("section"))
@@ -547,7 +675,7 @@ class Deck:
                     self.figures(s, vx, y, vw, h, figs, label, stack=True)
         if d.get("callout"):
             self.textbox(s, x, H - 0.45, w, 0.3, d["callout"], size=12, color="muted")
-        if d.get("conclusion") and show_conclusion:
+        if d.get("conclusion"):
             self.conclusion(s, d, label)
         notes = d.get("notes") or (as_list(d.get("full")) if dens["auto_notes"] else [])
         self.notes(s, notes)
@@ -637,11 +765,21 @@ class Deck:
                 hint = " (divider pages were removed — delete this slide)" if t == "divider" else ""
                 WARN.append(f"[{label}] unknown slide type '{t}' — skipped{hint}")
                 continue
-            if t == "content" and d.get("conclusion") and self.keyframes:
-                fn(d, label, show_conclusion=False)  # 'before' frame
-                self.page_number(self.prs.slides[-1])
             fn(d, label)
+            steps = self.steps
+            if steps and self.keyframes:
+                # one slide per click: frame k shows the first k steps (the slide is rebuilt identically)
+                drop_shapes(self.prs.slides[-1], [i for st in steps for i in st])
+                self.page_number(self.prs.slides[-1])
+                for k in range(1, len(steps) + 1):
+                    fn(d, label)
+                    drop_shapes(self.prs.slides[-1], [i for st in steps[k:] for i in st])
+                    self.page_number(self.prs.slides[-1])
+                continue
+            if steps:
+                click_steps(self.prs.slides[-1], steps)
             self.page_number(self.prs.slides[-1])
+        WARN[:] = list(dict.fromkeys(WARN))  # rebuilt keyframes repeat their warnings
         return self.prs
 
 
@@ -712,45 +850,92 @@ def color_table_md(rows):
 P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
 
 
-def fade_in_on_click(slide, shape_ids):
-    """Add a PowerPoint timing tree: one click fades in all shape_ids together (first on click, rest with it)."""
+def label_w(t):
+    """Width of a 13pt bold mark label; bold CJK and full-width brackets run ~15% wider than text_w."""
+    return text_w(t, 13) * 1.15
+
+
+def mark_gutters(marks, w, h):
+    """Space to keep free beside the image for outside note / band labels."""
+    g = {"left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0}
+    for m in marks:
+        side = m.get("side", "right") if m.get("type") == "note" else (
+            m.get("label_side", "right") if m.get("type") == "band" and m.get("text") else None)
+        if side in ("left", "right"):
+            g[side] = min(2.6, w * 0.32)
+        elif side in ("top", "bottom"):
+            g[side] = min(0.45, h * 0.12)
+    return g
+
+
+def mark_geometry(m):
+    """(x, y, w, h) as 0-1 fractions; row/rows and col/cols address equal-height table rows/columns (1-based)."""
+    fx, fy, fw, fh = m.get("x"), m.get("y"), m.get("w", 0), m.get("h", 0)
+    if "row" in m and m.get("rows"):
+        a, b = (m["row"], m["row"]) if isinstance(m["row"], int) else m["row"]
+        fy, fh = (a - 1) / m["rows"], (b - a + 1) / m["rows"]
+    if "col" in m and m.get("cols"):
+        a, b = (m["col"], m["col"]) if isinstance(m["col"], int) else m["col"]
+        fx, fw = (a - 1) / m["cols"], (b - a + 1) / m["cols"]
+    if m.get("type") == "band" and fx is None:
+        fx, fw = 0, 1  # a band spans the full width unless told otherwise
+    if fx is None or fy is None:
+        return None
+    return fx, fy, fw, fh
+
+
+def drop_shapes(slide, shape_ids):
+    ids = set(shape_ids)
+    for sh in list(slide.shapes):
+        if sh.shape_id in ids:
+            sh._element.getparent().remove(sh._element)
+
+
+def click_steps(slide, steps):
+    """Add a PowerPoint timing tree: each step fades in on one click (first shape on click, the rest with it)."""
     def el(parent, tag, **attrs):
         e = etree.SubElement(parent, f"{{{P_NS}}}{tag}")
         for k, v in attrs.items():
             e.set(k, str(v))
         return e
 
-    ids = iter(range(1, 1000))
+    ids = iter(range(1, 10000))
     timing = el(slide._element, "timing")
     root = el(el(el(timing, "tnLst"), "par"), "cTn", id=next(ids), dur="indefinite", restart="never",
               nodeType="tmRoot")
     seq = el(el(root, "childTnLst"), "seq", concurrent="1", nextAc="seek")
     main = el(seq, "cTn", id=next(ids), dur="indefinite", nodeType="mainSeq")
-    click = el(el(el(main, "childTnLst"), "par"), "cTn", id=next(ids), fill="hold")
-    el(el(click, "stCondLst"), "cond", delay="indefinite")
-    step = el(el(el(click, "childTnLst"), "par"), "cTn", id=next(ids), fill="hold")
-    el(el(step, "stCondLst"), "cond", delay="0")
-    effects = el(step, "childTnLst")
-    for k, spid in enumerate(shape_ids):
-        eff = el(el(effects, "par"), "cTn", id=next(ids), presetID="10", presetClass="entr", presetSubtype="0",
-                 fill="hold", grpId="0", nodeType="clickEffect" if k == 0 else "withEffect")
-        el(el(eff, "stCondLst"), "cond", delay="0")
-        beh = el(eff, "childTnLst")
-        st = el(beh, "set")
-        cb = el(st, "cBhvr")
-        vis = el(cb, "cTn", id=next(ids), dur="1", fill="hold")
-        el(el(vis, "stCondLst"), "cond", delay="0")
-        el(el(cb, "tgtEl"), "spTgt", spid=spid)
-        el(el(cb, "attrNameLst"), "attrName").text = "style.visibility"
-        el(el(st, "to"), "strVal", val="visible")
-        fcb = el(el(beh, "animEffect", transition="in", filter="fade"), "cBhvr")
-        el(fcb, "cTn", id=next(ids), dur="500")
-        el(el(fcb, "tgtEl"), "spTgt", spid=spid)
+    clicks = el(main, "childTnLst")
+    for shape_ids in steps:
+        click = el(el(clicks, "par"), "cTn", id=next(ids), fill="hold")
+        el(el(click, "stCondLst"), "cond", delay="indefinite")
+        step = el(el(el(click, "childTnLst"), "par"), "cTn", id=next(ids), fill="hold")
+        el(el(step, "stCondLst"), "cond", delay="0")
+        effects = el(step, "childTnLst")
+        for k, spid in enumerate(shape_ids):
+            eff = el(el(effects, "par"), "cTn", id=next(ids), presetID="10", presetClass="entr",
+                     presetSubtype="0", fill="hold", grpId="0", nodeType="clickEffect" if k == 0 else "withEffect")
+            el(el(eff, "stCondLst"), "cond", delay="0")
+            beh = el(eff, "childTnLst")
+            st = el(beh, "set")
+            cb = el(st, "cBhvr")
+            vis = el(cb, "cTn", id=next(ids), dur="1", fill="hold")
+            el(el(vis, "stCondLst"), "cond", delay="0")
+            el(el(cb, "tgtEl"), "spTgt", spid=spid)
+            el(el(cb, "attrNameLst"), "attrName").text = "style.visibility"
+            el(el(st, "to"), "strVal", val="visible")
+            fcb = el(el(beh, "animEffect", transition="in", filter="fade"), "cBhvr")
+            el(fcb, "cTn", id=next(ids), dur="500")
+            el(el(fcb, "tgtEl"), "spTgt", spid=spid)
     for tag, evt in (("prevCondLst", "onPrev"), ("nextCondLst", "onNext")):
         el(el(el(seq, tag), "cond", evt=evt, delay="0"), "tgtEl", ).append(etree.Element(f"{{{P_NS}}}sldTgt"))
+    # build entries only for text-capable shapes (p:sp), as PowerPoint writes them
+    sp_ids = {sh.shape_id for sh in slide.shapes if sh._element.tag == qn("p:sp")}
     bld = el(timing, "bldLst")
-    for spid in shape_ids:
-        el(bld, "bldP", spid=spid, grpId="0", animBg="1")
+    for shape_ids in steps:
+        for spid in shape_ids:
+            if spid in sp_ids:
+                el(bld, "bldP", spid=spid, grpId="0", animBg="1")
 
 
 def text_w(t, size):

@@ -132,7 +132,16 @@
       "figs": [
         {
           "id": "Figure 4",
-          "caption": "既有方法的計算時間"
+          "caption": "既有方法的計算時間",
+          "marks": [
+            {
+              "type": "note",
+              "x": 0.85,
+              "y": 0.15,
+              "side": "top",
+              "text": "網格一多，時間急遽上升"
+            }
+          ]
         }
       ],
       "section": "既有方法"

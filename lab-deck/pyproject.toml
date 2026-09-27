@@ -7,7 +7,7 @@ name = "lab-deck"
 version = "0.2.0"
 description = "Lab-meeting slide renderer: deck.json -> editable .pptx"
 requires-python = ">=3.9"
-dependencies = ["python-pptx>=0.6.21", "Pillow>=9", "lxml"]
+dependencies = ["python-pptx>=1.0", "Pillow>=9", "lxml"]
 
 [project.optional-dependencies]
 dev = ["pytest"]

@@ -105,7 +105,7 @@
   - 三種密度、兩種導覽列都會顯示。文字太長時會縮小字級，縮到 14pt 仍放不下就發出警告。
   - 雙排風格用它來呈現問題；這些問題最後要在「研究動機」彙整成 `mapping` 對照頁。
   - 不能用動畫的場合（匯出 PDF、上傳 Google 簡報），建置時加 `--keyframes`：每個有結論的頁面拆成前後兩頁
-    （沒有橫條／有遮罩與橫條），內容位置完全相同，翻頁時就像動畫。
+    （沒有橫條／有遮罩與橫條），內容位置完全相同，翻頁時就像動畫。截圖標註的 `reveal` 也一樣，每一下拆成一頁。
 - 缺少的欄位會依序遞補（例如沒寫 `short` 就用 `full`）。
 - `==文字==` 會變成藍色粗體強調。
 - `text_ratio`：單頁覆寫文字欄比例（0–1）。
@@ -135,6 +135,49 @@
 - `path` 相對於 deck.json 所在資料夾，只支援 PNG / JPG。檔案不存在時會畫虛線佔位框並發出警告，所以可以先建置、之後再補圖。
 - `table`：二維陣列，第一列是表頭。儲存格含「待填」會以橘色顯示，用來標示尚未填入的數值。
 - 同一頁有 `table` 時，`figs` 只會在 `visual` 密度顯示（當作表格的圖像版）。
+
+### 截圖標註（`figs[].marks`）
+
+在截圖（或佔位框）上疊加原生圖形，之後可以在 PowerPoint 裡直接拖曳、修改。
+
+```json
+"figs": [{
+  "id": "Table 2", "path": "figures/table_2.png",
+  "reveal": "click",
+  "marks": [
+    {"type": "band", "row": [2, 5], "rows": 8, "concept": "圖像層級", "text": "相同參數量"},
+    {"type": "box",  "row": 8, "rows": 8, "col": 3, "cols": 4},
+    {"type": "note", "x": 0.86, "y": 0.94, "text": "用執行效率換來的", "with_previous": true}
+  ]
+}]
+```
+
+| type | 畫出來的樣子 | 欄位 |
+|---|---|---|
+| `box` | 紅框（`FF0000`，2pt，不填色），圈出重點數值 | 位置；`color` 可改色 |
+| `band` | 半透明概念色塊（不透明度 45%），標出一組列 | 位置（沒寫 `x`／`w` 時橫跨整張圖）；`concept`；`text`；`label_side` |
+| `note` | 一句說明＋箭頭，箭頭指到 (`x`, `y`) | `x` `y`；`text`；`side`；`color`（箭頭）、`text_color` |
+
+**位置**：一律是相對於圖片的 0–1 比例（左上角是 0, 0），圖片換了解析度也不會跑位。
+- `x` `y` `w` `h`：直接給比例。
+- `row` + `rows`、`col` + `cols`：把圖片均分成 `rows` 列（`cols` 欄），`row` 寫第幾列（從 1 開始，含表頭），
+  或 `[起, 迄]`。適合列高平均的表格截圖；列高不平均時改用 `y` `h`。
+- 座標是看截圖估的，會有誤差，使用者可能需要在 PowerPoint 裡微調。
+
+**說明文字的位置**（`note` 的 `side`、`band` 的 `label_side`）：
+- `right`（預設）／`left`：放在截圖旁的欄位，截圖會縮小讓出空間；同一側有多個說明時自動往下排開。
+- `top`／`bottom`：放在截圖上方或下方（下方會放在圖說之後）。
+- `inside`：疊在圖上。`note` 用 `tx` `ty`（0–1）指定文字位置；`band` 的文字放在色塊內左側。
+- 說明文字寫在截圖旁邊，不要蓋住數值；只有圖上有空白處時才用 `inside`。
+
+**點一下出現**：圖加上 `"reveal": "click"`，每個標註依 `marks` 的順序各自點一下淡入；標註加 `"with_previous": true`
+就和上一個一起出現。同一頁有 `conclusion` 時，結論是最後一下。`--keyframes` 會拆成對應的頁數。
+
+**可編輯性**：每個元件命名為 `標註/<圖號>/紅框1`、`色塊2`、`色塊2說明`、`說明3`、`說明3箭頭`。
+沒有動畫時，截圖和所有標註組成一個群組 `標註/<圖號>`，可以整組移動；有 `reveal` 時不組群組
+（PowerPoint 無法對群組內的個別元件設定動畫）。
+
+截圖寬度小於 3.5 吋時會警告：標註在文字型密度下常常太小，改用 `balanced`／`visual`，或調小 `text_ratio`。
 
 ## 6. 概念色
 
@@ -185,11 +228,13 @@
 python scripts/build_deck.py deck.json -o out.pptx
 python scripts/build_deck.py deck.json -o out.pptx --nav double --density visual
 python scripts/build_deck.py deck.json -o out.pptx --all-densities   # 一次輸出三種密度
-python scripts/build_deck.py deck.json -o out.pptx --keyframes       # 不用動畫，結論橫條拆成前後兩頁
+python scripts/build_deck.py deck.json -o out.pptx --keyframes       # 不用動畫，每一下點擊拆成一頁
 ```
 
 以 `⚠` 開頭的輸出是警告，常見的有：
 - `text may overflow`：文字縮到最小字級仍放不下 → 刪減內容，或拆成兩頁。
 - `conclusion bar text may overflow`：結論橫條文字太長 → 縮成一句話。
+- `annotated … is only …in wide`：有標註的截圖太小 → 換密度或調 `text_ratio`。
+- `mark N: …`：標註的類型、座標或 `side` 寫錯。
 - `image missing`：找不到圖 → 補圖，或保留佔位並在回報中列出。
 - `only N figures fit`：圖太多 → 拆頁。
