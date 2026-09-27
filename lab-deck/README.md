@@ -4,8 +4,8 @@
 
 | 產出 | 用途 | Skill |
 |---|---|---|
-| **標注檔** | 自己讀：雙欄英中對照、技術高亮、逐段批註的網頁 | `ai-paper-annotator` |
-| **簡報** | 給別人聽：實驗室風格的可編輯 .pptx | `lab-deck` |
+| **標注檔** | 自己讀：雙欄英中對照、技術高亮、逐段批註的網頁 | `2annotate` |
+| **簡報** | 給別人聽：實驗室風格的可編輯 .pptx | `2slide` |
 
 預設兩者都產，也可以只產其中一個。有產出簡報時，會一併附上「顏色 → 概念」對照表，方便之後手動修改時沿用同一套配色。
 
@@ -17,11 +17,11 @@
 - **雙排**：章節用通用名稱，故事線放在子章節（子章節嵌在橘線上），頁面用黑字標題，問題以紅色結論橫條呈現。
 - **密度**：`text`（段落＋本頁重點）／`balanced`（條列＋圖）／`visual`（一句話＋滿版圖）。
 
-完整規範見 [`skills/lab-deck/references/style.md`](skills/lab-deck/references/style.md)。
+完整規範見 [`skills/2slide/references/style.md`](skills/2slide/references/style.md)。
 
 ## 安裝
 
-**claude.ai**：到 [Releases](../../releases) 下載 `lab-deck.skill` 與 `ai-paper-annotator.skill`，在「設定 → Capabilities → Skills」上傳。
+**claude.ai**：到 [Releases](../../releases) 下載 `2slide.skill` 與 `2annotate.skill`，在「設定 → Capabilities → Skills」上傳。
 
 **Claude Code 等 agent**：
 
@@ -59,8 +59,8 @@ python scripts/package_skills.py   # 輸出 dist/*.skill
 
 ```
 skills/
-  lab-deck/              SKILL.md、references/（style、narratives、spec）、scripts/build_deck.py、assets/
-  ai-paper-annotator/    SKILL.md、scripts/generate.py、assets/style.css、references/
+  2slide/                SKILL.md、references/（style、narratives、spec）、scripts/build_deck.py、assets/
+  2annotate/             SKILL.md、scripts/generate.py、assets/style.css、references/
 examples/                示範用的 deck.json（圖片一律使用佔位框）
 tests/                   建置測試
 ```

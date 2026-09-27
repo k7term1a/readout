@@ -18,4 +18,4 @@ lab-deck-build = "build_deck:main"
 # The renderer lives inside the skill folder so the skill stays self-contained on claude.ai.
 [tool.setuptools]
 py-modules = ["build_deck"]
-package-dir = {"" = "skills/lab-deck/scripts"}
+package-dir = {"" = "skills/2slide/scripts"}

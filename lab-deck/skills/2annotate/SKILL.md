@@ -1,5 +1,5 @@
 ---
-name: ai-paper-annotator
+name: 2annotate
 description: >
   AI 學術論文雙欄批註器。當使用者上傳 AI / ML / NLP 論文 PDF，或要求「摘取論文」
   「製作論文批註」「產生論文 JSON」「整理論文」「論文摘要 HTML」時，務必使用此 skill。

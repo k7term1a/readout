@@ -5,8 +5,8 @@
 ## 這個專案在做什麼
 
 一條「論文 → 標注檔＋簡報」的流程，由兩個 skill 組成：
-- `skills/ai-paper-annotator`：產出 paper.json、tables/、generate.py、style.css，讓使用者在本機產生雙欄批註網頁。這是使用者原本就寫好的 skill。
-- `skills/lab-deck`：統一分派流程；把內容寫成 deck.json，再由 `scripts/build_deck.py`（python-pptx）渲染成 .pptx。
+- `skills/2annotate`：產出 paper.json、tables/、generate.py、style.css，讓使用者在本機產生雙欄批註網頁。這是使用者原本就寫好的 skill。
+- `skills/2slide`：統一分派流程；把內容寫成 deck.json，再由 `scripts/build_deck.py`（python-pptx）渲染成 .pptx。
 
 簡報是**初稿**，使用者會自己在 PowerPoint 裡再修改，所以**可編輯性比精緻度重要**：
 文字放在文字方塊、架構圖用原生圖形繪製並組成群組、命名，不要把內容壓成圖片。
@@ -17,7 +17,7 @@
 - **單排**：研究提案（Google 簡報）
 - **雙排**：論文報告（PowerPoint，10 × 5.625 吋）
 
-規範已整理在 `skills/lab-deck/references/style.md`，**以該檔為準**。原始簡報不在 repo 裡（避免外流論文截圖與研究內容）；
+規範已整理在 `skills/2slide/references/style.md`，**以該檔為準**。原始簡報不在 repo 裡（避免外流論文截圖與研究內容）；
 使用者如果放在 `private/`，可以拿來對照。
 
 ## 已定案的設計決策
@@ -28,7 +28,7 @@
 - 紅色、綠色只用於「問題／解法」；概念色（藍 → 黃 → 紫 → 青灰）依每份簡報的內容指定，指定後整份不換色。
 - 同一份 deck.json 必須能用任意導覽列與密度的組合建置；每個內容頁都要寫 `full`、`short`、`one_line` 三種文字。
 - 數字不能捏造：沒有來源的數值一律寫「— 待填 —」。
-- 有產出簡報時，回報一定要附上色彩與概念對照表（格式見 lab-deck 的 SKILL.md 第 6 節）。
+- 有產出簡報時，回報一定要附上色彩與概念對照表（格式見 2slide 的 SKILL.md 第 6 節）。
 - 渲染器留在 skill 資料夾內（claude.ai 的 skill 必須能獨立運作），`pyproject.toml` 以 `package-dir` 指向它。
 
 ## 待辦（依序進行，每完成一項就更新 SKILL.md 的「實作狀態」段落）
@@ -52,17 +52,17 @@
 9. **收尾**：更新 `spec.md`、範例與測試（每項功能至少一個測試）；刪除 SKILL.md 的「實作狀態」段落；打 tag 發佈。
 
 另外兩件小事：
-- `skills/ai-paper-annotator/SKILL.md` 裡的路徑寫成 `/mnt/skills/user/ai-paper-annotator/`，實際安裝後的路徑會依環境而不同，
+- `skills/2annotate/SKILL.md` 裡的路徑寫成 `/mnt/skills/user/ai-paper-annotator/`，實際安裝後的路徑會依環境而不同，
   改成相對於 skill 資料夾的寫法。
-- ai-paper-annotator 的描述在「上傳論文」時也會觸發，和 lab-deck 重疊。可以在它的描述最後加一句
-  「若使用者也要簡報，改由 lab-deck 主導」；這是使用者的 skill，**修改前先問過使用者**。
+- 2annotate 的描述在「上傳論文」時也會觸發，和 2slide 重疊。可以在它的描述最後加一句
+  「若使用者也要簡報，改由 2slide 主導」；這是使用者的 skill，**修改前先問過使用者**。
 
 ## 開發方式
 
 ```bash
 pip install -e ".[dev]"
 pytest -q
-python skills/lab-deck/scripts/build_deck.py skills/lab-deck/assets/example-deck.json -o out/ex.pptx --all-densities
+python skills/2slide/scripts/build_deck.py skills/2slide/assets/example-deck.json -o out/ex.pptx --all-densities
 soffice --headless --convert-to pdf --outdir out out/ex-balanced.pptx && pdftoppm -jpeg -r 60 out/ex-balanced.pdf out/p
 ```
 

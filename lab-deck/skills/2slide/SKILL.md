@@ -1,22 +1,22 @@
 ---
-name: lab-deck
+name: 2slide
 description: >
-  論文報告一條龍：丟進一篇論文，預設同時產出「標注檔」（ai-paper-annotator 的雙欄批註網頁，給自己讀）
+  論文報告一條龍：丟進一篇論文，預設同時產出「標注檔」（2annotate 的雙欄批註網頁，給自己讀）
   與「Lab Meeting 簡報」（可編輯 .pptx，給別人聽），也可以只產其中一個。簡報依使用者實驗室的兩種風格：
   單排導覽列（章節即故事線、「/ 彩色標籤」、左文右圖）與雙排導覽列（通用章節＋子章節嵌在橘線上、
   黑字標題、紅色結論橫條、漸進聚焦、截圖標註），密度可選文字型／平衡型／圖像型。
   只要使用者上傳論文要報告、提到 lab meeting、實驗室報告、論文報告簡報、進度報告、導讀幾篇論文，
   或要調整這類簡報的導覽列、密度、配色，就務必使用此 skill。
-  只要批註網頁、不要簡報時，也由此 skill 分派給 ai-paper-annotator。
+  只要批註網頁、不要簡報時，也由此 skill 分派給 2annotate。
 ---
 
-# Lab Deck
+# 2slide
 
 一篇論文進來，產出兩種東西：
 
 | 產出 | 給誰 | 做法 |
 |---|---|---|
-| **標注檔** | 自己讀 | 依 `ai-paper-annotator` 的 SKILL.md 產出 paper.json、tables/、generate.py、style.css |
+| **標注檔** | 自己讀 | 依 `2annotate` 的 SKILL.md 產出 paper.json、tables/、generate.py、style.css |
 | **簡報** | 給別人聽 | 寫 deck.json，用 `scripts/build_deck.py` 渲染成 .pptx |
 
 簡報是**初稿**：使用者拿到後會自己在 PowerPoint 裡修改。所以可編輯性比精緻度重要（見第 5 節）。
@@ -51,7 +51,7 @@ description: >
 
 ## 2. 先做標注（兩者都產時）
 
-先完整依 `ai-paper-annotator` 的 SKILL.md 產出標注檔。簡報再從 **paper.json** 取材，不要重讀 PDF：
+先完整依 `2annotate` 的 SKILL.md 產出標注檔。簡報再從 **paper.json** 取材，不要重讀 PDF：
 這樣兩份產出的內容、術語、圖表編號才會一致。
 
 **只產簡報時**，仍在工作資料夾建立 paper.json 當中間檔（可以只寫 `meta`、`summary`、

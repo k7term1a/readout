@@ -7,10 +7,10 @@ import pytest
 from pptx import Presentation
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "skills/lab-deck/scripts"))
+sys.path.insert(0, str(ROOT / "skills/2slide/scripts"))
 import build_deck as bd  # noqa: E402
 
-EXAMPLES = [ROOT / "skills/lab-deck/assets/example-deck.json", ROOT / "examples/progress-report/deck.json"]
+EXAMPLES = [ROOT / "skills/2slide/assets/example-deck.json", ROOT / "examples/progress-report/deck.json"]
 
 
 @pytest.mark.parametrize("spec_path", EXAMPLES, ids=lambda p: p.parent.name)

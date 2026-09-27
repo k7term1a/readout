@@ -1,6 +1,6 @@
 # 表格擷取規則（Table Extraction Reference）
 
-> 本文件是 ai-paper-annotator skill 的內部 reference，描述如何從論文 PDF
+> 本文件是 2annotate skill 的內部 reference，描述如何從論文 PDF
 > 擷取表格並輸出為 `tables/table_X.json` 檔案。
 >
 > 主 SKILL.md 在 Step 3 會引用本文件。

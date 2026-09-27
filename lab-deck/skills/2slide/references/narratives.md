@@ -60,9 +60,9 @@
 - 每篇論文內部依序講「問題 → 解法 → 結果」，各 2–4 頁。
 - 用雙排導覽時，把「問題／方法／結果」設成每篇論文的子章節。
 
-## 從 paper.json（ai-paper-annotator 產出）轉換
+## 從 paper.json（2annotate 產出）轉換
 
-如果使用者有 ai-paper-annotator 產出的 `paper.json`，優先從它取材，不必重讀 PDF：
+如果使用者有 2annotate 產出的 `paper.json`，優先從它取材，不必重讀 PDF：
 
 | paper.json | 用途 |
 |---|---|
