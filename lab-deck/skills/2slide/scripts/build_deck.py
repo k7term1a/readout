@@ -24,6 +24,7 @@ from pptx.util import Inches, Pt
 
 W, H = 13.333, 7.5
 MARGIN = 0.9
+BAR_H = 0.62  # red conclusion bar
 
 DEFAULT_THEME = {
     "colors": {
@@ -314,6 +315,27 @@ class Deck:
                 col = "FFFFFF" if r == 0 else ("todo" if "待填" in str(val) else "dark")
                 self.style(rr, size, col, bold=r == 0)
 
+    def conclusion(self, s, text, label):
+        """Full-width red bar with white text at the bottom of the slide (the problem this slide shows)."""
+        x, w, y = 0.6, W - 1.2, H - 0.5 - BAR_H
+        size = 20
+        while size > 14 and text_w(text, size) > w - 0.6:
+            size -= 1
+        if text_w(text, size) > w - 0.6:
+            WARN.append(f"[{label}] conclusion bar text may overflow at {size}pt — shorten it")
+        sh = self.shape(s, MSO_SHAPE.RECTANGLE, x, y, w, BAR_H, fill="problem")
+        sh.name = "結論橫條"
+        tf = sh.text_frame
+        tf.word_wrap, tf.vertical_anchor = True, MSO_ANCHOR.MIDDLE
+        tf.margin_left = tf.margin_right = Inches(0.3)
+        tf.margin_top = tf.margin_bottom = 0
+        p = tf.paragraphs[0]
+        p.alignment = PP_ALIGN.CENTER
+        r = p.add_run()
+        r.text = text
+        self.style(r, size, "FFFFFF", bold=True)
+        return sh
+
     def key_point(self, s, x, y, w, h, text):
         self.shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h, fill="tint", radius=0.12)
         self.textbox(s, x + 0.3, y, w - 0.6, h, [{"t": "本頁重點", "size": 12, "color": "active", "bold": True},
@@ -373,6 +395,9 @@ class Deck:
         self.nav(s, d.get("chapter"), d.get("section"))
         self.heading(s, d)
         x, y, w, h = self.body()
+        if d.get("conclusion"):
+            h -= BAR_H + 0.15
+            self.conclusion(s, d["conclusion"], label)
         key = dens["key"]
         txt = pick_text(d, key)
         figs, table = d.get("figs", []), d.get("table")

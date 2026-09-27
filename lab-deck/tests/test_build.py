@@ -153,3 +153,37 @@ def test_unknown_cover_style_warns(tmp_path):
 def test_paper_cover_falls_back_to_byline(tmp_path):
     t = cover_of(tmp_path, "double", authors=None, paper_title=None)
     assert "中文標題" in t and "報告人．用途" in t
+
+
+def bar_spec(conclusion, **extra):
+    return {"chapters": ["甲"], "cover": {"title": "t"},
+            "slides": [{"type": "content", "chapter": "甲", "tag": "x", "title": "標題", "full": ["段落"],
+                        "short": ["條列"], "one_line": "一句話", "figs": [{"id": "Figure 1"}],
+                        "conclusion": conclusion, **extra}]}
+
+
+@pytest.mark.parametrize("nav", ["single", "double"])
+@pytest.mark.parametrize("density", list(bd.DENSITIES))
+def test_conclusion_bar(tmp_path, nav, density):
+    slide = build(tmp_path, bar_spec("既有方法算不動"), nav, density)[1]
+    bar = texts(slide)["既有方法算不動"]
+    assert bar.name == "結論橫條" and str(bar.fill.fore_color.rgb) == C["problem"]
+    assert str(bar.text_frame.paragraphs[0].runs[0].font.color.rgb) == "FFFFFF"
+    assert bar.left == bd.Inches(0.6) and bar.width == bd.Inches(bd.W - 1.2)  # full width, same as the rule
+    # everything else (except the page number) ends above the bar
+    others = [sh for sh in slide.shapes if sh.shape_id != bar.shape_id and not isinstance(sh, Connector)
+              and not slidenum_fields_in(sh) and sh.top > bd.Inches(1.1)]
+    assert others and all(sh.top + sh.height <= bar.top for sh in others)
+
+
+def slidenum_fields_in(shape):
+    return shape._element.findall(".//" + bd.qn("a:fld"))
+
+
+def test_no_bar_without_conclusion(tmp_path):
+    assert all(sh.name != "結論橫條" for sh in build(tmp_path, bar_spec(None), "double")[1].shapes)
+
+
+def test_long_conclusion_warns(tmp_path):
+    build(tmp_path, bar_spec("太長" * 60), "double")
+    assert any("conclusion bar" in w for w in bd.WARN)
