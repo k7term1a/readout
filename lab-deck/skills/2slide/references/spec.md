@@ -8,8 +8,9 @@
 3. 內容頁（content）與三種密度
 4. 其他頁型（mapping / split / refs / statement）
 5. 圖片與表格
-6. 主題覆寫
-7. 建置指令與警告
+6. 概念色
+7. 主題覆寫
+8. 建置指令與警告
 
 ---
 
@@ -19,6 +20,7 @@
 {
   "style":    {"nav": "single", "density": "balanced", "conclusion_pos": "center"},
   "chapters": [{"name": "問題背景", "sections": ["資料限制", "既有方法"]}, "..."],
+  "concepts": {"圖像層級": 1, "區域層級": 2},
   "cover":    {"title": "…", "subtitle": "…", "byline": "報告人．Lab Meeting 論文報告", "date": "2026 / 10 / 02",
                "venue": "IJCAI 2018", "paper_title": "…", "authors": ["…"], "affiliations": ["…"], "presenter": "〇〇〇"},
   "theme":    {"colors": {}, "fonts": {}},
@@ -29,6 +31,7 @@
 - `style.nav`：`single`（一排章節分頁）或 `double`（章節＋子章節兩排）。指令列 `--nav` 可覆寫。
 - `style.density`：`text` / `balanced` / `visual`，整份簡報的預設密度。`--density` 可覆寫，單頁也可用 `density` 覆寫。
 - `chapters`：導覽列的分頁，順序即顯示順序。可寫字串或 `{name, sections}`；`double` 模式需要 `sections`。
+- `concepts`：概念名稱 → 概念色槽位（1–4），見第 6 節。
 - 封面不顯示導覽列，見下方「封面」。
 
 ### 封面
@@ -133,7 +136,39 @@
 - `table`：二維陣列，第一列是表頭。儲存格含「待填」會以橘色顯示，用來標示尚未填入的數值。
 - 同一頁有 `table` 時，`figs` 只會在 `visual` 密度顯示（當作表格的圖像版）。
 
-## 6. 主題覆寫
+## 6. 概念色
+
+頂層 `concepts` 指定論文裡需要區分的概念，每個概念一個槽位（1–4），整份簡報不換色：
+
+| 槽位 | 底色 | 描邊／文字 |
+|---|---|---|
+| 1（藍） | `B6CFF5` | `3C78D8` |
+| 2（黃） | `FFECB3` | `BF9000` |
+| 3（紫） | `D9D2E9` | `674EA7` |
+| 4（青灰） | `D0E0E3` | `45818E` |
+
+標記方式：
+
+- **文字**：`{{圖像層級}}`，或 `{{圖像層級|顯示的文字}}`（用別的字，但算同一個概念）。渲染成該概念的文字色粗體。
+  所有文字欄位都可以用（`title`、`subtitle`、`full`、`short`、`one_line`、表格、`split` 等）；
+  放在膠囊標籤或結論橫條裡時只顯示文字、不上色，但仍會記入色彩對照。
+- **圖片**：`figs[].concept: "圖像層級"`。截圖外加一圈概念色描邊；佔位框改用概念色底與描邊。
+- **表格列**：某一列的第一格以 `{{概念}}` 開頭，整列套用該概念的底色，例如 `["{{圖像層級}} CLIP", "76.2"]`。
+
+- 同一個槽位不能給兩個概念；槽位超出 1–4、或用了沒宣告的概念，都會發出警告並以一般文字呈現。
+- 紅色、綠色保留給問題／解法，不能當概念色（槽位本來就不包含這兩色）。
+
+**色彩對照**：每次建置後會印出一張 Markdown 表，列出這份簡報實際用到的紅（問題）、綠（解法）與各個概念色，
+附色碼、代表的內容與出現的頁碼，可以直接貼進回報。問題與解法的名稱優先取自 `mapping` 對照頁。
+
+```
+| 顏色 | 色碼 | 代表 | 出現在 |
+|---|---|---|---|
+| 紅 | `E06666` | 問題：只有快照，沒有軌跡／格間流動看不見 | 第 2–5 頁 |
+| 概念色 1（藍） | `B6CFF5`／`3C78D8` | 出發機率 | 第 7 頁 |
+```
+
+## 7. 主題覆寫
 
 預設色取自實驗室簡報：主色 `1085DE`、未選分頁 `B7DAF5`（單排）／`BFBFBF`（雙排）、分隔線 `FF9900`、問題 `E06666`、解法 `8CD96A`。
 要換色只寫要改的鍵：
@@ -142,9 +177,9 @@
 "theme": {"colors": {"active": "2E7D32", "rule": "F9A825"}, "fonts": {"ea": "Noto Sans TC"}}
 ```
 
-可改的顏色鍵：`active inactive inactive_double rule text dark problem solution neutral muted good_bg good_fg bad_bg bad_fg tint todo`。
+可改的顏色鍵：`active inactive inactive_double rule text dark problem solution neutral muted good_bg good_fg bad_bg bad_fg tint todo`，以及概念色 `concept1_bg`、`concept1_fg` … `concept4_fg`。
 
-## 7. 建置指令與警告
+## 8. 建置指令與警告
 
 ```bash
 python scripts/build_deck.py deck.json -o out.pptx

@@ -278,3 +278,98 @@ def test_conclusion_pos_deck_default_and_override(tmp_path):
 def test_unknown_conclusion_pos_warns(tmp_path):
     build(tmp_path, bar_spec("結論", conclusion_pos="top"), "double")
     assert any("conclusion_pos" in w for w in bd.WARN)
+
+
+CONCEPTS = {"圖像層級": 1, "區域層級": 2}
+
+
+def concept_spec(slides, concepts=CONCEPTS):
+    return {"chapters": ["甲"], "concepts": concepts, "cover": {"title": "t"}, "slides": slides}
+
+
+def runs_of(slide):
+    return [r for sh in slide.shapes if sh.has_text_frame
+            for p in sh.text_frame.paragraphs for r in p.runs]
+
+
+def test_parse_marks():
+    assert bd.parse_marks("a ==b== {{c}} {{c|d}}") == [
+        ("a ", False, None), ("b", True, None), (" ", False, None), ("c", False, "c"), (" ", False, None),
+        ("d", False, "c")]
+    assert bd.plain_text("{{圖像層級|整張圖}}的特徵") == "整張圖的特徵"
+
+
+def test_inline_concept_text_is_coloured(tmp_path):
+    spec = concept_spec([{"type": "content", "chapter": "甲", "tag": "x", "title": "{{區域層級}}標題",
+                          "short": ["比較{{圖像層級}}與{{區域層級|區域}}"]}])
+    slide = build(tmp_path, spec, "double", "balanced")[1]
+    runs = {r.text: r for r in runs_of(slide)}
+    assert "{{" not in "".join(runs)  # marks never leak into the slide
+    assert str(runs["圖像層級"].font.color.rgb) == C["concept1_fg"] and runs["圖像層級"].font.bold
+    assert str(runs["區域"].font.color.rgb) == C["concept2_fg"]
+    assert str(runs["區域層級"].font.color.rgb) == C["concept2_fg"]  # in the title too
+
+
+def test_figure_and_table_row_concept_blocks(tmp_path):
+    spec = concept_spec([
+        {"type": "content", "chapter": "甲", "one_line": "y", "figs": [{"id": "Figure 1", "concept": "區域層級"}]},
+        {"type": "content", "chapter": "甲", "short": ["t"],
+         "table": [["方法", "分數"], ["{{圖像層級}} A", "1"], ["B", "2"]]}])
+    slides = build(tmp_path, spec, "double", "visual")
+    ph = texts(slides[1])["Figure 1\n從論文 PDF 截圖後替換"]
+    assert str(ph.fill.fore_color.rgb) == C["concept2_bg"] and str(ph.line.color.rgb) == C["concept2_fg"]
+    slides = build(tmp_path, spec, "double", "balanced")
+    tbl = next(sh for sh in slides[2].shapes if sh.has_table).table
+    assert [str(tbl.cell(1, c).fill.fore_color.rgb) for c in range(2)] == [C["concept1_bg"]] * 2
+    assert str(tbl.cell(2, 0).fill.fore_color.rgb) != C["concept1_bg"]
+    assert tbl.cell(1, 0).text == "圖像層級 A"
+
+
+def test_colour_table_lists_used_colours_and_pages(tmp_path):
+    spec = concept_spec([
+        {"type": "content", "chapter": "甲", "tag": "一、問題", "kind": "problem", "short": ["{{圖像層級}}"]},
+        {"type": "mapping", "chapter": "甲", "pairs": [["問題 A", "解法 A"]]},
+        {"type": "content", "chapter": "甲", "tag": "x", "short": ["{{圖像層級}} 再次出現"]},
+        {"type": "content", "chapter": "甲", "tag": "x", "short": ["無"], "conclusion": "結論"}],
+        concepts={**CONCEPTS, "沒用到": 3})
+    rows = bd.render(spec, tmp_path, "balanced", "single", str(tmp_path / "o.pptx"))
+    by = {r["color"]: r for r in rows}
+    assert set(by) == {"紅", "綠", "概念色 1（藍）"}  # unused concept 2/3 not listed
+    assert by["概念色 1（藍）"]["pages"] == [2, 4] and by["概念色 1（藍）"]["meaning"] == "圖像層級"
+    assert by["概念色 1（藍）"]["hex"] == [C["concept1_bg"], C["concept1_fg"]]
+    assert by["紅"]["meaning"] == "問題：問題 A" and by["紅"]["pages"] == [2, 3, 5]  # mapping names win
+    md = bd.color_table_md(rows)
+    assert "| 概念色 1（藍） | `B6CFF5`／`3C78D8` | 圖像層級 | 第 2、4 頁 |" in md
+    assert bd.page_ranges([2, 3, 4, 7]) == "第 2–4、7 頁"
+
+
+@pytest.mark.parametrize("concepts, needle", [({"a": 5}, "slot 5"), ({"a": 1, "b": 1}, "used twice")])
+def test_bad_concept_slots_warn(tmp_path, concepts, needle):
+    build(tmp_path, concept_spec([], concepts), "double")
+    assert any(needle in w for w in bd.WARN)
+
+
+def test_undeclared_concept_warns_and_renders_plain(tmp_path):
+    slide = build(tmp_path, concept_spec([{"type": "content", "chapter": "甲", "short": ["{{未宣告}}"]}]),
+                  "double", "balanced")[1]
+    assert any("未宣告" in w for w in bd.WARN)
+    assert "未宣告" in [r.text for r in runs_of(slide)]
+
+
+def test_bullet_keeps_body_colour_before_concept(tmp_path):
+    spec = concept_spec([{"type": "content", "chapter": "甲", "short": ["{{圖像層級}}：說明"]}])
+    slide = build(tmp_path, spec, "double", "balanced")[1]
+    clr = slide._element.find(".//" + bd.qn("a:buClr"))
+    assert clr is not None and clr[0].get("val") == C["text"]
+
+
+def test_concept_frame_around_real_image(tmp_path):
+    from PIL import Image
+    Image.new("RGB", (400, 300), "white").save(tmp_path / "f.png")
+    spec = concept_spec([{"type": "content", "chapter": "甲", "one_line": "y",
+                          "figs": [{"id": "Figure 1", "path": "f.png", "concept": "圖像層級"}]}])
+    slide = build(tmp_path, spec, "double", "visual")[1]
+    (frame,) = named(slide, "概念框/圖像層級")
+    pic = next(sh for sh in slide.shapes if sh.shape_type == 13)  # picture
+    assert str(frame.line.color.rgb) == C["concept1_fg"]
+    assert frame.left < pic.left and frame.left + frame.width > pic.left + pic.width

@@ -11,6 +11,7 @@ The spec format is documented in references/spec.md.
 """
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -34,6 +35,8 @@ DEFAULT_THEME = {
         "problem": "E06666", "solution": "8CD96A", "neutral": "1085DE", "muted": "8A8A8A",
         "good_bg": "D9EAD3", "good_fg": "274E13", "bad_bg": "F4CCCC", "bad_fg": "990000",
         "tint": "EEF5FC", "ph_bg": "F3F6FA", "ph_line": "9FB3C8", "ph_text": "5A6B7D", "todo": "E69138",
+        "concept1_bg": "B6CFF5", "concept1_fg": "3C78D8", "concept2_bg": "FFECB3", "concept2_fg": "BF9000",
+        "concept3_bg": "D9D2E9", "concept3_fg": "674EA7", "concept4_bg": "D0E0E3", "concept4_fg": "45818E",
     },
     "fonts": {"ea": "Microsoft JhengHei", "latin": "Arial", "ref_latin": "Times New Roman"},
 }
@@ -46,6 +49,8 @@ DENSITIES = {
 }
 FALLBACK = {"full": ["full", "short", "one_line"], "short": ["short", "full", "one_line"],
             "one_line": ["one_line", "short", "full"]}
+
+CONCEPT_NAMES = {1: "藍", 2: "黃", 3: "紫", 4: "青灰"}
 
 WARN = []
 
@@ -64,6 +69,17 @@ class Deck:
         self.density, self.nav_style = density, nav_style
         self.keyframes = keyframes
         self.chapters = spec.get("chapters") or []
+        self.concepts = {}  # name -> slot 1..4
+        for name, slot in (spec.get("concepts") or {}).items():
+            if slot not in CONCEPT_NAMES:
+                WARN.append(f"[concepts] '{name}' has slot {slot!r}; use 1–4 — ignored")
+            elif slot in self.concepts.values():
+                WARN.append(f"[concepts] slot {slot} is used twice ('{name}') — each concept needs its own colour")
+            else:
+                self.concepts[name] = slot
+        # colour key -> {"pages": set, "names": [...], "mapping": [...]} for the colour table
+        self.uses = {}
+        self.page = 0
         self.prs = Presentation()
         self.prs.slide_width, self.prs.slide_height = Inches(W), Inches(H)
         self.body_top = 1.95 if nav_style == "single" else 2.2
@@ -84,7 +100,43 @@ class Deck:
             el.set("typeface", self.F["ea"])
 
     def slide(self):
-        return self.prs.slides.add_slide(self.prs.slide_layouts[6])
+        sl = self.prs.slides.add_slide(self.prs.slide_layouts[6])
+        self.page = len(self.prs.slides)
+        return sl
+
+    # ------------------------------------------------------------ marks & colour usage
+    def use(self, key, name=None, source="names"):
+        u = self.uses.setdefault(key, {"pages": set(), "names": [], "mapping": []})
+        u["pages"].add(self.page)
+        if name and name not in u[source]:
+            u[source].append(name)
+
+    def segments(self, t):
+        """Parse ==highlight== and {{concept}} / {{concept|text}} marks; logs concept use on this page."""
+        out = []
+        for text, hl, concept in parse_marks(str(t)):
+            if concept is not None:
+                if concept not in self.concepts:
+                    msg = f"[concepts] '{concept}' is not declared in top-level concepts — drawn as plain text"
+                    if msg not in WARN:
+                        WARN.append(msg)
+                    concept = None
+                else:
+                    self.use(f"concept:{concept}", concept)
+            out.append((text, hl, concept))
+        return out
+
+    def plain(self, t):
+        return "".join(seg for seg, _, _ in self.segments(t))
+
+    def concept_slot(self, name, label):
+        if not name:
+            return None
+        if name not in self.concepts:
+            WARN.append(f"[{label}] concept '{name}' is not declared in top-level concepts — ignored")
+            return None
+        self.use(f"concept:{name}", name)
+        return self.concepts[name]
 
     def textbox(self, s, x, y, w, h, paras, size=18, color="text", bold=False, align=PP_ALIGN.LEFT,
                 anchor=MSO_ANCHOR.TOP, bullet=False, space=10, latin=None, min_size=None, label=""):
@@ -104,16 +156,22 @@ class Deck:
             para.alignment = align
             para.space_after = Pt(p.get("space", space))
             para.line_spacing = 1.15
-            for seg, hl in split_marks(p["t"]):
+            for seg, hl, concept in self.segments(p["t"]):
                 r = para.add_run()
                 r.text = seg
-                self.style(r, p.get("size", size), p.get("color", color), p.get("bold", bold) or hl, latin)
+                self.style(r, p.get("size", size), p.get("color", color),
+                           p.get("bold", bold) or hl or concept is not None, latin)
                 if hl:
                     r.font.color.rgb = self.rgb("active")
+                if concept is not None:
+                    r.font.color.rgb = self.rgb(f"concept{self.concepts[concept]}_fg")
             if bullet and p.get("bullet", True):
                 ppr = para._p.get_or_add_pPr()
                 ppr.set("marL", str(int(Inches(0.3))))
                 ppr.set("indent", str(-int(Inches(0.3))))
+                # bullet keeps the body colour even when the line starts with a coloured concept
+                bu_clr = etree.SubElement(etree.SubElement(ppr, qn("a:buClr")), qn("a:srgbClr"))
+                bu_clr.set("val", self.C.get(p.get("color", color), p.get("color", color)))
                 etree.SubElement(ppr, qn("a:buChar")).set("char", "•")
         return tb
 
@@ -136,7 +194,10 @@ class Deck:
         sh.shadow.inherit = False
         return sh
 
-    def pill(self, s, x, y, w, h, text, fill, size=16, color="FFFFFF", bold=True):
+    def pill(self, s, x, y, w, h, text, fill, size=16, color="FFFFFF", bold=True, source="names"):
+        text = self.plain(text)
+        if fill in ("problem", "solution"):
+            self.use(fill, text, source)
         sh = self.shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h, fill=fill, radius=0.5)
         tf = sh.text_frame
         tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
@@ -250,7 +311,8 @@ class Deck:
     def figure(self, s, x, y, w, h, fig, label):
         fig = norm_fig(fig)
         path = fig.get("path")
-        cap = f"{fig.get('id', '')}｜{fig.get('caption', '')}".strip("｜")
+        cap = self.plain(f"{fig.get('id', '')}｜{fig.get('caption', '')}".strip("｜"))
+        slot = self.concept_slot(fig.get("concept"), label)
         if path:
             p = Path(path)
             p = p if p.is_absolute() else self.base / p
@@ -265,13 +327,19 @@ class Deck:
                     iw = ih * ar
                 ix, iy = x + (w - iw) / 2, y + (h - ch - ih) / 2
                 s.shapes.add_picture(str(p), Inches(ix), Inches(iy), Inches(iw), Inches(ih))
+                if slot:  # concept frame around the screenshot
+                    fr = self.shape(s, MSO_SHAPE.RECTANGLE, ix - 0.05, iy - 0.05, iw + 0.1, ih + 0.1,
+                                    line=f"concept{slot}_fg")
+                    fr.line.width = Pt(2.25)
+                    fr.name = f"概念框/{fig['concept']}"
                 if cap:
                     self.textbox(s, x, iy + ih + 0.08, w, 0.3, cap, size=11, color="muted",
                                  align=PP_ALIGN.CENTER)
                 return
             WARN.append(f"[{label}] image missing or unsupported (use PNG/JPG): {path} — placeholder drawn")
-        sh = self.shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h, fill="ph_bg", line="ph_line",
-                        radius=0.04, dash=True)
+        sh = self.shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h,
+                        fill=f"concept{slot}_bg" if slot else "ph_bg",
+                        line=f"concept{slot}_fg" if slot else "ph_line", radius=0.04, dash=True)
         tf = sh.text_frame
         tf.word_wrap = True
         tf.vertical_anchor = MSO_ANCHOR.MIDDLE
@@ -306,17 +374,26 @@ class Deck:
         shp = s.shapes.add_table(len(rows), len(rows[0]), Inches(x), Inches(y), Inches(w),
                                  Inches(0.55 * len(rows)))
         for r, row in enumerate(rows):
+            # a row whose first cell starts with {{concept}} is filled with that concept's colour
+            first = parse_marks(str(row[0])) if r else []
+            row_concept = first[0][2] if first and first[0][2] in self.concepts else None
             for c, val in enumerate(row):
                 cell = shp.table.cell(r, c)
                 cell.fill.solid()
-                cell.fill.fore_color.rgb = self.rgb("active" if r == 0 else ("FFFFFF" if r % 2 else "tint"))
+                bg = "active" if r == 0 else ("FFFFFF" if r % 2 else "tint")
+                if row_concept:
+                    bg = f"concept{self.concepts[row_concept]}_bg"
+                cell.fill.fore_color.rgb = self.rgb(bg)
                 cell.vertical_anchor = MSO_ANCHOR.MIDDLE
                 p = cell.text_frame.paragraphs[0]
                 p.alignment = PP_ALIGN.CENTER if c else PP_ALIGN.LEFT
-                rr = p.add_run()
-                rr.text = str(val)
-                col = "FFFFFF" if r == 0 else ("todo" if "待填" in str(val) else "dark")
-                self.style(rr, size, col, bold=r == 0)
+                for seg, hl, concept in self.segments(val):
+                    rr = p.add_run()
+                    rr.text = seg
+                    col = "FFFFFF" if r == 0 else ("todo" if "待填" in seg else "dark")
+                    self.style(rr, size, col, bold=r == 0 or hl or concept is not None)
+                    if concept is not None and not row_concept and r:
+                        rr.font.color.rgb = self.rgb(f"concept{self.concepts[concept]}_fg")
 
     def conclusion_pos(self, d, label=None):
         pos = d.get("conclusion_pos") or self.spec.get("style", {}).get("conclusion_pos", "center")
@@ -333,10 +410,12 @@ class Deck:
         pos 'bottom': space is reserved under the content; the veil stops at the bar at the bottom.
         Both fade in together on one click, unless building keyframes (then this slide is the 'after' frame).
         """
-        text, kind = d["conclusion"], d.get("conclusion_kind", "problem")
+        text, kind = self.plain(d["conclusion"]), d.get("conclusion_kind", "problem")
         if kind not in ("problem", "solution", "neutral"):
             WARN.append(f"[{label}] unknown conclusion_kind '{kind}' — using 'problem'")
             kind = "problem"
+        if kind in ("problem", "solution"):
+            self.use(kind, text)
         x, w, top = 0.6, W - 1.2, self.body_top - 0.15
         if self.conclusion_pos(d, label) == "bottom":
             y = H - 0.5 - BAR_H
@@ -485,8 +564,8 @@ class Deck:
         for k, (a, b) in enumerate(pairs):
             yy = top + k * step
             size = 17 if max(text_w(a, 17), text_w(b, 17)) < pw - 0.4 else 14
-            self.pill(s, lx, yy, pw, ph, a, "problem", size=size)
-            self.pill(s, rx, yy, pw, ph, b, "solution", size=size)
+            self.pill(s, lx, yy, pw, ph, a, "problem", size=size, source="mapping")
+            self.pill(s, rx, yy, pw, ph, b, "solution", size=size, source="mapping")
             self.line(s, lx + pw + 0.25, yy + ph / 2, rx - 0.25, yy + ph / 2, "444444", 1.75, arrow=True)
         self.notes(s, d.get("notes"))
 
@@ -566,7 +645,70 @@ class Deck:
         return self.prs
 
 
+    def color_table(self):
+        """Rows for the report's colour/concept table: only colours this deck actually uses."""
+        rows = []
+        for key, label, hexes, what in (("problem", "紅", [self.C["problem"]], "問題"),
+                                        ("solution", "綠", [self.C["solution"]], "解法")):
+            u = self.uses.get(key)
+            if u:
+                names = u["mapping"] or u["names"]
+                rows.append({"color": label, "hex": hexes, "meaning": f"{what}：" + "／".join(names),
+                             "pages": sorted(u["pages"])})
+        for name, slot in sorted(self.concepts.items(), key=lambda kv: kv[1]):
+            u = self.uses.get(f"concept:{name}")
+            if u:
+                rows.append({"color": f"概念色 {slot}（{CONCEPT_NAMES[slot]}）",
+                             "hex": [self.C[f"concept{slot}_bg"], self.C[f"concept{slot}_fg"]],
+                             "meaning": name, "pages": sorted(u["pages"])})
+        return rows
+
+
 # ---------------------------------------------------------------- helpers
+MARK_RE = re.compile(r"==(.+?)==|\{\{([^{}|]+?)(?:\|([^{}]+))?\}\}")
+
+
+def parse_marks(t):
+    """'a ==b== {{c|d}}' -> [('a ', False, None), ('b', True, None), (' ', False, None), ('d', False, 'c')]"""
+    out, pos = [], 0
+    for m in MARK_RE.finditer(t):
+        if m.start() > pos:
+            out.append((t[pos:m.start()], False, None))
+        if m.group(1) is not None:
+            out.append((m.group(1), True, None))
+        else:
+            name = m.group(2).strip()
+            out.append((m.group(3) or name, False, name))
+        pos = m.end()
+    if pos < len(t):
+        out.append((t[pos:], False, None))
+    return out or [("", False, None)]
+
+
+def plain_text(t):
+    return "".join(seg for seg, _, _ in parse_marks(str(t)))
+
+
+def page_ranges(pages):
+    """[2, 3, 4, 7] -> '第 2–4、7 頁'"""
+    runs, start = [], None
+    for k, pg in enumerate(pages):
+        if start is None:
+            start = pg
+        if k + 1 == len(pages) or pages[k + 1] != pg + 1:
+            runs.append(f"{start}–{pg}" if pg > start else str(pg))
+            start = None
+    return f"第 {'、'.join(runs)} 頁" if runs else ""
+
+
+def color_table_md(rows):
+    lines = ["| 顏色 | 色碼 | 代表 | 出現在 |", "|---|---|---|---|"]
+    for r in rows:
+        hexes = "／".join(f"`{h}`" for h in r["hex"])
+        lines.append(f"| {r['color']} | {hexes} | {r['meaning']} | {page_ranges(r['pages'])} |")
+    return "\n".join(lines)
+
+
 P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
 
 
@@ -613,13 +755,7 @@ def fade_in_on_click(slide, shape_ids):
 
 def text_w(t, size):
     em = size / 72
-    return sum(em if ord(ch) > 0x2E80 else em * 0.55 for ch in t)
-
-
-def split_marks(t):
-    """'a ==b== c' -> [('a ', False), ('b', True), (' c', False)]"""
-    parts = t.split("==")
-    return [(p, i % 2 == 1) for i, p in enumerate(parts) if p] or [("", False)]
+    return sum(em if ord(ch) > 0x2E80 else em * 0.55 for ch in plain_text(t))
 
 
 def est_height(paras, size, width, space, bullet):
@@ -628,7 +764,7 @@ def est_height(paras, size, width, space, bullet):
         s = p.get("size", size)
         avail = width - (0.3 if bullet else 0)
         lines = 0
-        for seg in p["t"].replace("==", "").split("\n"):
+        for seg in plain_text(p["t"]).split("\n"):
             lines += max(1, -(-text_w(seg, s) // max(avail, 0.5)))
         total += lines * s * 1.15 / 72 + p.get("space", space) / 72
     return total
@@ -654,13 +790,19 @@ def norm_fig(f):
     return {"id": f[0], "caption": f[1] if len(f) > 1 else "", "path": f[2] if len(f) > 2 else None}
 
 
-def render(spec, base, density, nav, out, keyframes=False):
+def render(spec, base, density, nav, out, keyframes=False, quiet_table=False):
+    """Build and save one deck; returns the colour-table rows."""
     WARN.clear()
-    prs = Deck(spec, base, density, nav, keyframes).build()
+    deck = Deck(spec, base, density, nav, keyframes)
+    prs = deck.build()
     prs.save(out)
     print(f"✔ {out}  ({len(prs.slides)} slides, density={density}, nav={nav})")
     for w in WARN:
         print("  ⚠", w)
+    rows = deck.color_table()
+    if rows and not quiet_table:
+        print("\n色彩對照（貼進回報用）：\n" + color_table_md(rows) + "\n")
+    return rows
 
 
 def main():
@@ -680,7 +822,8 @@ def main():
     out = Path(a.out or spec_path.with_suffix(".pptx"))
     if a.all_densities:
         for d in DENSITIES:
-            render(spec, spec_path.parent, d, nav, str(out.with_name(f"{out.stem}-{d}.pptx")), a.keyframes)
+            render(spec, spec_path.parent, d, nav, str(out.with_name(f"{out.stem}-{d}.pptx")), a.keyframes,
+                   quiet_table=d != list(DENSITIES)[-1])  # print the table once
     else:
         render(spec, spec_path.parent, a.density or style.get("density", "balanced"), nav, str(out),
                a.keyframes)
