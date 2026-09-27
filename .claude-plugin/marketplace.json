@@ -1,0 +1,11 @@
+{
+  "name": "readout",
+  "owner": {"name": "k7term1a"},
+  "plugins": [
+    {
+      "name": "readout",
+      "source": ".",
+      "description": "論文 → 雙欄批註網頁（2annotate）＋實驗室風格的可編輯簡報（2slide）"
+    }
+  ]
+}

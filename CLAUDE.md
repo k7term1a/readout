@@ -4,7 +4,8 @@
 
 ## 這個專案在做什麼
 
-一條「論文 → 標注檔＋簡報」的流程，由兩個 skill 組成：
+`readout`：一條「論文 → 標注檔＋簡報」的流程。repo 本身是一個 Claude Code plugin（`.claude-plugin/`），
+底下有兩個 skill（claude.ai 則是各自上傳 `dist/*.skill`）：
 - `skills/2annotate`：產出 paper.json、tables/、generate.py、style.css，讓使用者在本機產生雙欄批註網頁。這是使用者原本就寫好的 skill。
 - `skills/2slide`：統一分派流程；把內容寫成 deck.json，再由 `scripts/build_deck.py`（python-pptx）渲染成 .pptx。
 
@@ -44,8 +45,10 @@
    供 agent 直接貼進回報。
 5. **截圖標註**：`figs[].marks`，每個標記可以是 `box`（紅框）、`band`（半透明概念色塊＋文字）、`note`（箭頭＋說明）；
    座標用相對於圖片的 0–1 比例，圖片換了也不會跑位。
-6. **原生架構圖**：新增 `diagram` 頁型，以節點與連線描述（`nodes` / `edges`，節點有 `id`、`label`、`col`、`row`），
-   自動排版；`highlight` 用綠色描邊標出新元件；整張圖組成一個群組，每個節點命名為 `架構圖/<id>`。
+6. **原生架構圖**：新增 `diagram` 頁型。用途是報告者**自己整理出來的概念架構**（不是取代論文截圖）。
+   以節點與連線描述（`nodes` / `edges`，節點有 `id`、`label`、`col`、`row`，可跨列），自動排版、**一頁滿版**；
+   連線樣式統一（直角折線，盡量對齊），用 PowerPoint 連接線黏在節點上；節點可以放縮圖；可以用虛線模組框
+   框住多個節點；`highlight` 用綠色描邊標出新元件；整張圖組成一個群組，每個節點命名為 `架構圖/<id>`。
 7. **時間軸**：新增 `timeline` 頁型，橫軸為年份，縱向用概念色帶分類。
 8. **漸進聚焦**：新增 `focus_sequence`：指定一個 base 頁（content、diagram 或帶標註的圖）與依序聚焦的元素，
    展開成多頁；每頁只有聚焦的元素保持原色，其餘淡化（透明度約 70%，文字改為 `C0C0C0`）。
@@ -59,12 +62,19 @@
 
 ## 開發方式
 
+用 [uv](https://docs.astral.sh/uv/) 管理環境（`uv.lock` 要一起提交）：
+
 ```bash
-pip install -e ".[dev]"
-pytest -q
-python skills/2slide/scripts/build_deck.py skills/2slide/assets/example-deck.json -o out/ex.pptx --all-densities
-soffice --headless --convert-to pdf --outdir out out/ex-balanced.pptx && pdftoppm -jpeg -r 60 out/ex-balanced.pdf out/p
+uv sync                      # 建立 .venv，安裝套件（可編輯模式）與 pytest
+uv run pytest -q
+uv run readout-slide skills/2slide/assets/example-deck.json -o out/ex.pptx --all-densities
+uv run scripts/package_skills.py   # 輸出 dist/*.skill
 ```
+
+轉成圖片檢查：有 LibreOffice 時用
+`soffice --headless --convert-to pdf --outdir out out/ex-balanced.pptx && pdftoppm -jpeg -r 60 out/ex-balanced.pdf out/p`；
+Windows 上也可以用 PowerPoint COM（`Presentation.Slides(i).Export(path, "PNG", 1280, 720)`），
+結論橫條、截圖標註的動畫可以用 `Slide.TimeLine.MainSequence` 檢查。
 
 每做完一項，都要轉成圖片**實際看過**，並和 style.md 的規範對照後才算完成。改外觀時，同時檢查單排與雙排、三種密度，
 不要只看其中一種。

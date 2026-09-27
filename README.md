@@ -1,4 +1,4 @@
-# lab-deck
+# readout
 
 丟進一篇論文，產出兩樣東西：
 
@@ -23,18 +23,22 @@
 
 **claude.ai**：到 [Releases](../../releases) 下載 `2slide.skill` 與 `2annotate.skill`，在「設定 → Capabilities → Skills」上傳。
 
-**Claude Code 等 agent**：
+**Claude Code**：整個 repo 是一個 plugin，安裝後兩個 skill 分別是 `/readout:2slide` 與 `/readout:2annotate`。
 
 ```bash
-npx skills add <你的帳號>/lab-deck
+claude plugin marketplace add k7term1a/readout
+claude plugin install readout@readout
 ```
+
+在 Claude Code 對話中也可以用 `/plugin marketplace add k7term1a/readout`、`/plugin install readout@readout`。
 
 **只要渲染器（命令列）**：
 
 ```bash
-pip install git+https://github.com/<你的帳號>/lab-deck
-lab-deck-build deck.json -o talk.pptx --nav double --density visual
-lab-deck-build deck.json -o talk.pptx --all-densities   # 一次輸出三種密度
+uv tool install git+https://github.com/k7term1a/readout
+readout-slide deck.json -o talk.pptx --nav double --density visual
+readout-slide deck.json -o talk.pptx --all-densities   # 一次輸出三種密度
+readout-slide deck.json -o talk.pptx --keyframes       # 不用動畫，每一下點擊拆成一頁（匯出 PDF 用）
 ```
 
 ## 使用方式
@@ -49,15 +53,18 @@ lab-deck-build deck.json -o talk.pptx --all-densities   # 一次輸出三種密�
 
 ## 開發
 
+用 [uv](https://docs.astral.sh/uv/) 管理環境：
+
 ```bash
-pip install -e ".[dev]"
-pytest -q                          # 所有範例 × 兩種導覽列 × 三種密度都要能建置，且沒有版面警告
-python scripts/package_skills.py   # 輸出 dist/*.skill
+uv sync                            # 建立 .venv，安裝套件與 pytest
+uv run pytest -q                   # 所有範例 × 兩種導覽列 × 三種密度都要能建置，且沒有版面警告
+uv run scripts/package_skills.py   # 輸出 dist/*.skill
 ```
 
 推送 `v*` tag 時，CI 會自動把兩個 skill 打包並發佈到 Releases。
 
 ```
+.claude-plugin/          plugin.json、marketplace.json（Claude Code plugin：readout）
 skills/
   2slide/                SKILL.md、references/（style、narratives、spec）、scripts/build_deck.py、assets/
   2annotate/             SKILL.md、scripts/generate.py、assets/style.css、references/

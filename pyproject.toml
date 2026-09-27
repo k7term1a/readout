@@ -3,17 +3,17 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lab-deck"
+name = "readout"
 version = "0.2.0"
-description = "Lab-meeting slide renderer: deck.json -> editable .pptx"
+description = "Paper -> annotated reading page + editable lab-meeting slides (deck.json -> .pptx)"
 requires-python = ">=3.9"
 dependencies = ["python-pptx>=1.0", "Pillow>=9", "lxml"]
 
-[project.optional-dependencies]
-dev = ["pytest"]
-
 [project.scripts]
-lab-deck-build = "build_deck:main"
+readout-slide = "build_deck:main"
+
+[dependency-groups]
+dev = ["pytest"]
 
 # The renderer lives inside the skill folder so the skill stays self-contained on claude.ai.
 [tool.setuptools]

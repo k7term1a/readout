@@ -14,7 +14,8 @@ def package(skill_dir: Path, out_dir: Path) -> Path:
     out = out_dir / f"{skill_dir.name}.skill"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for f in sorted(skill_dir.rglob("*")):
-            if f.is_file() and not SKIP.intersection(f.parts) and f.suffix != ".pyc":
+            skip = SKIP.intersection(f.parts) or any(part.endswith(".egg-info") for part in f.parts)
+            if f.is_file() and not skip and f.suffix != ".pyc":
                 z.write(f, f.relative_to(skill_dir.parent))
     return out
 

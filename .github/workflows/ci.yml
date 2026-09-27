@@ -14,12 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install -e ".[dev]"
-      - run: pytest -q
-      - run: python scripts/package_skills.py
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run pytest -q
+      - run: uv run scripts/package_skills.py
       - uses: actions/upload-artifact@v4
         with:
           name: skills
@@ -31,10 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: python scripts/package_skills.py
+      - uses: astral-sh/setup-uv@v6
+      - run: uv run --no-project scripts/package_skills.py
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*.skill
