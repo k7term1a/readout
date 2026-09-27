@@ -38,6 +38,7 @@ DEFAULT_THEME = {
         "good_bg": "D9EAD3", "good_fg": "274E13", "bad_bg": "F4CCCC", "bad_fg": "990000",
         "tint": "EEF5FC", "ph_bg": "F3F6FA", "ph_line": "9FB3C8", "ph_text": "5A6B7D", "todo": "E69138",
         "mark": "FF0000", "new_line": "6AA84F", "new_bg": "D9EAD3", "node_line": "7F7F7F", "edge": "595959",
+        "lane_bg": "EFEFEF", "lane_fg": "7F7F7F",
         "concept1_bg": "B6CFF5", "concept1_fg": "3C78D8", "concept2_bg": "FFECB3", "concept2_fg": "BF9000",
         "concept3_bg": "D9D2E9", "concept3_fg": "674EA7", "concept4_bg": "D0E0E3", "concept4_fg": "45818E",
     },
@@ -777,6 +778,144 @@ class Deck:
             self.conclusion(s, d, label)
         self.notes(s, d.get("notes") or as_list(d.get("full") or d.get("short")))
 
+    # ------------------------------------------------------------ timeline
+    def s_timeline(self, d, label):
+        """Years on a bottom axis, one horizontal band per category, items as small pills (years only)."""
+        s = self.slide()
+        self.nav(s, d.get("chapter"), d.get("section"))
+        self.heading(s, d)
+        items = [dict(it) for it in d.get("items", []) if self.timeline_item_ok(it, label)]
+        lanes = d.get("lanes") or [{"name": ""}]
+        names = [ln.get("name", "") for ln in lanes]
+        for it in items:
+            it.setdefault("lane", names[0])
+            if it["lane"] not in names:
+                WARN.append(f"[{label}] timeline item '{it.get('label')}' uses unknown lane '{it['lane']}'")
+        items = [it for it in items if it["lane"] in names]
+        if not items:
+            WARN.append(f"[{label}] timeline has no items")
+            return
+        y0, y1 = d.get("years") or (min(it["year"] for it in items), max(it["year"] for it in items))
+        ncol = y1 - y0 + 1
+
+        bottom = H - 0.6 - 0.55  # leave room for the year axis
+        if d.get("conclusion") and self.conclusion_pos(d) == "bottom":
+            bottom -= BAR_H + 0.2
+        top = self.body_top
+        lab_w = max([label_w(self.plain(n)) + 0.45 for n in names if n] + [0]) if any(names) else 0
+        lab_w = min(max(lab_w, 1.3), 2.4) if lab_w else 0
+        x0, x1 = MARGIN, W - MARGIN
+        gx0, gx1 = x0 + lab_w + 0.15, x1 - 0.15  # the year grid
+        colw = (gx1 - gx0) / ncol
+        band_gap = 0.12
+        xs = lambda yr: gx0 + (yr - y0 + 0.5) * colw
+        plans = {ln.get("name", ""): self.timeline_plan([it for it in items if it["lane"] == ln.get("name", "")], xs)
+                 for ln in lanes}
+        band_h = (bottom - top - band_gap * (len(lanes) - 1)) / len(lanes)
+        # bands only as tall as their content needs (so a sparse timeline doesn't float in empty colour)
+        need = max(pl["height"] for pl in plans.values()) + 0.7
+        band_h = min(band_h, max(1.3, need))
+        bottom = top + len(lanes) * band_h + band_gap * (len(lanes) - 1)
+        drawn = []
+        for k, ln in enumerate(lanes):
+            by = top + k * (band_h + band_gap)
+            slot = self.concept_slot(ln.get("concept"), label)
+            bg, fg = (f"concept{slot}_bg", f"concept{slot}_fg") if slot else ("lane_bg", "lane_fg")
+            band = self.shape(s, MSO_SHAPE.RECTANGLE, x0, by, x1 - x0, band_h, fill=bg)
+            band.name = f"時間軸/分類/{self.plain(ln.get('name', '')) or k + 1}"
+            drawn.append(band)
+            if ln.get("name"):
+                t = self.textbox(s, x0 + 0.2, by, lab_w - 0.2, band_h, ln["name"], size=15, color=fg, bold=True,
+                                 anchor=MSO_ANCHOR.MIDDLE)
+                t.name = f"{band.name}/名稱"
+                drawn.append(t)
+            drawn += self.timeline_lane(s, plans[ln.get("name", "")], xs, by, band_h, fg, label)
+        # year axis
+        ay = bottom + 0.2
+        ax = self.line(s, gx0 - 0.1, ay, gx1, ay, "muted", 1.25)
+        ax.name = "時間軸/年份軸"
+        drawn.append(ax)
+        every = max(1, int(-(-0.55 // colw)))  # skip labels when columns get narrow
+        for yr in range(y0, y1 + 1):
+            tick = self.line(s, xs(yr), ay - 0.06, xs(yr), ay + 0.06, "muted", 1.25)
+            tick.name = f"時間軸/年份軸/{yr}"
+            drawn.append(tick)
+            if (yr - y0) % every == 0:
+                t = self.textbox(s, xs(yr) - 0.4, ay + 0.1, 0.8, 0.3, str(yr), size=12, color="muted",
+                                 align=PP_ALIGN.CENTER)
+                t.name = f"時間軸/年份軸/{yr}/標籤"
+                drawn.append(t)
+        grp = s.shapes.add_group_shape(drawn)
+        grp.name = "時間軸"
+        if d.get("conclusion"):
+            self.conclusion(s, d, label)
+        self.notes(s, d.get("notes") or as_list(d.get("full") or d.get("short")))
+
+    def timeline_item_ok(self, it, label):
+        if not isinstance(it.get("year"), int):
+            WARN.append(f"[{label}] timeline item '{it.get('label')}' needs an integer year (years only) — skipped")
+            return False
+        return True
+
+    TL_PILL_H, TL_NOTE_H, TL_GAP = 0.38, 0.24, 0.1
+
+    def timeline_plan(self, items, xs):
+        """Assign items to tracks so neighbours in the same band never overlap horizontally."""
+        tracks = []  # each: right edge of the last pill
+        placed = []
+        for it in sorted(items, key=lambda i: (i["year"], i.get("label", ""))):
+            w = label_w(self.plain(it.get("label", ""))) + 0.4
+            left = xs(it["year"]) - w / 2
+            if it.get("note"):
+                w_note = text_w(self.plain(it["note"]), 11) + 0.1
+                left = min(left, xs(it["year"]) - w_note / 2)
+                w = max(w, w_note)
+            k = next((i for i, r in enumerate(tracks) if left >= r + 0.08), None)
+            if k is None:
+                tracks.append(0)
+                k = len(tracks) - 1
+            tracks[k] = left + w
+            placed.append((it, k))
+        row_h = self.TL_PILL_H + (self.TL_NOTE_H if any(it.get("note") for it in items) else 0) + self.TL_GAP
+        return {"placed": placed, "tracks": len(tracks), "row_h": row_h,
+                "height": max(len(tracks) * row_h - self.TL_GAP, 0), "n": len(items)}
+
+    def timeline_lane(self, s, plan, xs, by, band_h, fg, label):
+        """Draw a lane's pills; its tracks are centred vertically in the band."""
+        pill_h, note_h = self.TL_PILL_H, self.TL_NOTE_H
+        placed, row_h, total = plan["placed"], plan["row_h"], plan["height"]
+        if total > band_h - 0.1:
+            WARN.append(f"[{label}] timeline band is too crowded ({plan['n']} items in {plan['tracks']} rows) — "
+                        "split the timeline or widen the year range")
+        start = by + (band_h - total) / 2
+        out = []
+        for it, k in placed:
+            new = bool(it.get("highlight"))
+            text = self.plain(it.get("label", ""))
+            w = label_w(text) + 0.4
+            y = start + k * row_h
+            pill = self.shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, xs(it["year"]) - w / 2, y, w, pill_h,
+                              fill="new_bg" if new else "FFFFFF", line="new_line" if new else fg, radius=0.5)
+            pill.line.width = Pt(2.25 if new else 1.25)
+            tf = pill.text_frame
+            tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
+            tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+            para = tf.paragraphs[0]
+            para.alignment = PP_ALIGN.CENTER
+            r = para.add_run()
+            r.text = text
+            self.style(r, 13, "dark", True)
+            pill.name = f"時間軸/{text}"
+            if new:
+                self.use("new", text)
+            out.append(pill)
+            if it.get("note"):
+                t = self.textbox(s, xs(it["year"]) - 0.9, y + pill_h + 0.02, 1.8, note_h, it["note"], size=11,
+                                 color="muted", align=PP_ALIGN.CENTER)
+                t.name = f"時間軸/{text}/註記"
+                out.append(t)
+        return out
+
     def build(self):
         self.s_cover(self.spec.get("cover", {}))
         for i, d in enumerate(self.spec.get("slides", []), start=2):
@@ -818,7 +957,8 @@ class Deck:
         u = self.uses.get("new")
         if u:
             rows.append({"color": "綠色描邊", "hex": [self.C["new_line"], self.C["new_bg"]],
-                         "meaning": "架構圖中新增或有變化的元件：" + "／".join(u["names"]), "pages": sorted(u["pages"])})
+                         "meaning": "新增、有變化或要強調的元件（架構圖、時間軸）：" + "／".join(u["names"]),
+                         "pages": sorted(u["pages"])})
         for name, slot in sorted(self.concepts.items(), key=lambda kv: kv[1]):
             u = self.uses.get(f"concept:{name}")
             if u:

@@ -62,6 +62,51 @@
       ]
     },
     {
+      "type": "timeline",
+      "chapter": "問題背景",
+      "tag": "既有方法",
+      "title": "既有方法的演進",
+      "lanes": [
+        {
+          "name": "統計模型"
+        },
+        {
+          "name": "深度學習"
+        }
+      ],
+      "items": [
+        {
+          "label": "方法 A",
+          "year": 2016,
+          "lane": "統計模型"
+        },
+        {
+          "label": "方法 B",
+          "year": 2018,
+          "lane": "統計模型"
+        },
+        {
+          "label": "方法 C",
+          "year": 2019,
+          "lane": "深度學習"
+        },
+        {
+          "label": "方法 D",
+          "year": 2021,
+          "lane": "深度學習"
+        },
+        {
+          "label": "本研究",
+          "year": 2026,
+          "lane": "統計模型",
+          "highlight": true
+        }
+      ],
+      "notes": [
+        "示意用的時間軸，方法名稱與年份請換成實際文獻。"
+      ]
+    },
+    {
       "type": "mapping",
       "chapter": "概念提案",
       "pairs": [

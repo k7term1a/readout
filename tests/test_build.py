@@ -638,3 +638,74 @@ def test_diagram_with_conclusion_keyframes(tmp_path):
     bd.render(spec, tmp_path, "visual", "double", str(out), keyframes=True)
     before, after = list(Presentation(str(out)).slides)[1:]
     assert not named(before, "結論橫條") and named(after, "結論橫條")
+
+
+# ---------------------------------------------------------------- timeline
+TL = {"type": "timeline", "chapter": "甲", "tag": "t", "title": "演進",
+      "lanes": [{"name": "圖像層級", "concept": "圖像層級"}, {"name": "其他"}],
+      "items": [{"label": "CLIP", "year": 2021, "lane": "圖像層級", "note": "ICML"},
+                {"label": "ALIGN", "year": 2021, "lane": "圖像層級"},
+                {"label": "BLIP", "year": 2022, "lane": "圖像層級"},
+                {"label": "X", "year": 2020, "lane": "其他"},
+                {"label": "本文", "year": 2023, "lane": "其他", "highlight": True}]}
+
+
+def timeline_slide(tmp_path, nav="double", **extra):
+    return build(tmp_path, concept_spec([{**TL, **extra}]), nav)[1]
+
+
+def centre_x(sh):
+    return sh.left + sh.width / 2
+
+
+def test_timeline_structure_and_colours(tmp_path):
+    sl = timeline_slide(tmp_path)
+    (grp,) = [sh for sh in sl.shapes if sh.shape_type == 6]
+    assert grp.name == "時間軸"
+    n = by_name(sl)
+    assert str(n["時間軸/分類/圖像層級"].fill.fore_color.rgb) == C["concept1_bg"]
+    assert str(n["時間軸/分類/其他"].fill.fore_color.rgb) == C["lane_bg"]  # no concept -> grey, not a new colour
+    assert str(n["時間軸/本文"].line.color.rgb) == C["new_line"]
+    assert n["時間軸/CLIP/註記"].text_frame.text == "ICML"
+
+
+def test_timeline_items_sit_on_their_year(tmp_path):
+    n = by_name(timeline_slide(tmp_path))
+    ticks = {yr: n[f"時間軸/年份軸/{yr}"] for yr in range(2020, 2024)}
+    for label, yr in (("CLIP", 2021), ("BLIP", 2022), ("X", 2020), ("本文", 2023)):
+        assert abs(centre_x(n[f"時間軸/{label}"]) - ticks[yr].begin_x) < 2000
+    # same year, same band: stacked, not overlapping
+    a, c = n["時間軸/ALIGN"], n["時間軸/CLIP"]
+    assert a.top + a.height <= c.top or c.top + c.height <= a.top
+    # items stay inside their band
+    band = n["時間軸/分類/圖像層級"]
+    for lab in ("CLIP", "ALIGN", "BLIP"):
+        sh = n[f"時間軸/{lab}"]
+        assert band.top <= sh.top and sh.top + sh.height <= band.top + band.height
+
+
+def test_timeline_years_range_and_colour_table(tmp_path):
+    spec = concept_spec([{**TL, "years": [2018, 2024]}])
+    rows = bd.render(spec, tmp_path, "visual", "double", str(tmp_path / "o.pptx"))
+    n = by_name(Presentation(str(tmp_path / "o.pptx")).slides[1])
+    assert "時間軸/年份軸/2018" in n and "時間軸/年份軸/2024" in n
+    green = next(r for r in rows if r["color"] == "綠色描邊")
+    assert "本文" in green["meaning"]
+
+
+@pytest.mark.parametrize("items, needle", [
+    ([{"label": "A", "year": 2021.5}], "integer year"),
+    ([{"label": "A", "year": 2021, "lane": "不存在"}], "unknown lane"),
+    ([{"label": f"模型{i}", "year": 2021, "lane": "其他"} for i in range(12)], "too crowded"),
+])
+def test_timeline_warnings(tmp_path, items, needle):
+    timeline_slide(tmp_path, items=items)
+    assert any(needle in w for w in bd.WARN), bd.WARN
+
+
+def test_timeline_conclusion_keyframes(tmp_path):
+    out = tmp_path / "kf.pptx"
+    bd.render(concept_spec([{**TL, "conclusion": "都只做圖像層級"}]), tmp_path, "visual", "double", str(out),
+              keyframes=True)
+    before, after = list(Presentation(str(out)).slides)[1:]
+    assert not named(before, "結論橫條") and named(after, "結論橫條")
