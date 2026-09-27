@@ -72,6 +72,9 @@ def test_double_rule_breaks_around_sections(tmp_path):
     assert len(with_secs) == 2 and len(without) == 1
     (l0, l1), (r0, r1) = with_secs
     assert l1 < min(p.left for p in pills) and r0 > max(p.left + p.width for p in pills)
+    # left-aligned but not flush: a short stub of rule sits before the first pill
+    first = min(p.left for p in pills)
+    assert l0 < l1 < first < bd.Inches(bd.W / 4)
     # the section pills straddle the rule
     rule_y = next(c for c in slides[1].shapes if isinstance(c, Connector)).begin_y
     assert all(p.top < rule_y < p.top + p.height for p in pills)

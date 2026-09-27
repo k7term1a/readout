@@ -183,7 +183,7 @@ class Deck:
         if secs:
             sh, ssize, sgap = 0.34, 13, 0.12
             widths = [text_w(t, ssize) + 0.45 for t in secs]
-            x = left = (W - (sum(widths) + sgap * (len(secs) - 1))) / 2
+            x = left = 1.2  # left-aligned, leaving a short stub of rule before the first pill
             for t, w in zip(secs, widths):
                 self.pill(s, x, rule_y - sh / 2, w, sh, t, "active" if t == section else off, size=ssize)
                 x += w + sgap
