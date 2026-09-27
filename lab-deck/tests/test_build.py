@@ -187,3 +187,52 @@ def test_no_bar_without_conclusion(tmp_path):
 def test_long_conclusion_warns(tmp_path):
     build(tmp_path, bar_spec("太長" * 60), "double")
     assert any("conclusion bar" in w for w in bd.WARN)
+
+
+def named(slide, name):
+    return [sh for sh in slide.shapes if sh.name == name]
+
+
+def timing_targets(slide):
+    """(spid, nodeType) of every entrance effect in the slide's timing tree."""
+    out = []
+    for ctn in slide._element.iter(bd.qn("p:cTn")):
+        if ctn.get("presetClass") == "entr":
+            spid = next(ctn.iter(bd.qn("p:spTgt"))).get("spid")
+            out.append((int(spid), ctn.get("nodeType"), ctn.get("presetID")))
+    return out
+
+
+def test_conclusion_fades_in_on_one_click_with_veil(tmp_path):
+    slide = build(tmp_path, bar_spec("結論"), "double", "balanced")[1]
+    (veil,), (bar,) = named(slide, "結論遮罩"), named(slide, "結論橫條")
+    # fade (presetID 10): veil on click, bar with it
+    assert timing_targets(slide) == [(veil.shape_id, "clickEffect", "10"), (bar.shape_id, "withEffect", "10")]
+    # translucent white veil from under the heading down to the bar, drawn above the content
+    alpha = veil.fill._xPr.find(bd.qn("a:solidFill"))[0].find(bd.qn("a:alpha"))
+    assert str(veil.fill.fore_color.rgb) == "FFFFFF" and int(alpha.get("val")) == bd.VEIL_ALPHA * 1000
+    assert veil.top + veil.height == bar.top and veil.left == bar.left and veil.width == bar.width
+    title = texts(slide)["標題"]
+    assert veil.top >= title.top + title.height
+    # z-order: veil above every content shape, bar above the veil (only the page number may come later)
+    order = [sh.shape_id for sh in slide.shapes if not slidenum_fields_in(sh)]
+    assert order[-2:] == [veil.shape_id, bar.shape_id]
+
+
+@pytest.mark.parametrize("kind", ["problem", "solution", "neutral"])
+def test_conclusion_kind_colours(tmp_path, kind):
+    (bar,) = named(build(tmp_path, bar_spec("結論", conclusion_kind=kind), "double")[1], "結論橫條")
+    assert str(bar.fill.fore_color.rgb) == C[kind]
+
+
+def test_keyframes_split_into_before_and_after(tmp_path):
+    out = tmp_path / "kf.pptx"
+    bd.render(bar_spec("結論"), tmp_path, "balanced", "double", str(out), keyframes=True)
+    cover, before, after = Presentation(str(out)).slides
+    assert not named(before, "結論橫條") and not named(before, "結論遮罩")
+    assert named(after, "結論橫條") and named(after, "結論遮罩")
+    assert not timing_targets(before) and not timing_targets(after)  # no animation in keyframe mode
+    # the content does not move between frames
+    geom = lambda sl: [(sh.left, sh.top, sh.width, sh.height) for sh in sl.shapes
+                       if sh.name not in ("結論橫條", "結論遮罩") and not slidenum_fields_in(sh)]
+    assert geom(before) == geom(after)

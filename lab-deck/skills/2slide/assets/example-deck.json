@@ -196,6 +196,8 @@
         "距離衰減：越遠越不容易過去"
       ],
       "one_line": "移動機率 = 出發機率 × 聚集分數 × 距離衰減",
+      "conclusion": "三個因子取代逐對變數，參數量大幅減少",
+      "conclusion_kind": "solution",
       "figs": [
         {
           "id": "Figure 6",

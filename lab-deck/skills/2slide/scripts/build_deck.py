@@ -5,6 +5,7 @@ usage:
   python build_deck.py deck.json -o out.pptx
   python build_deck.py deck.json -o out.pptx --density visual --nav double
   python build_deck.py deck.json -o out.pptx --all-densities   # out-text/-balanced/-visual.pptx
+  python build_deck.py deck.json -o out.pptx --keyframes       # conclusion bars as before/after slides
 
 The spec format is documented in references/spec.md.
 """
@@ -24,7 +25,8 @@ from pptx.util import Inches, Pt
 
 W, H = 13.333, 7.5
 MARGIN = 0.9
-BAR_H = 0.62  # red conclusion bar
+BAR_H = 0.62  # conclusion bar
+VEIL_ALPHA = 70  # % opacity of the white veil that fades the content when the conclusion bar appears
 
 DEFAULT_THEME = {
     "colors": {
@@ -50,7 +52,7 @@ WARN = []
 
 # ---------------------------------------------------------------- primitives
 class Deck:
-    def __init__(self, spec, base, density, nav_style):
+    def __init__(self, spec, base, density, nav_style, keyframes=False):
         theme = json.loads(json.dumps(DEFAULT_THEME))
         for k, v in spec.get("theme", {}).items():
             theme.setdefault(k, {}).update(v)
@@ -60,6 +62,7 @@ class Deck:
             self.C["neutral"] = self.C["active"]
         self.spec, self.base = spec, base
         self.density, self.nav_style = density, nav_style
+        self.keyframes = keyframes
         self.chapters = spec.get("chapters") or []
         self.prs = Presentation()
         self.prs.slide_width, self.prs.slide_height = Inches(W), Inches(H)
@@ -315,17 +318,30 @@ class Deck:
                 col = "FFFFFF" if r == 0 else ("todo" if "待填" in str(val) else "dark")
                 self.style(rr, size, col, bold=r == 0)
 
-    def conclusion(self, s, text, label):
-        """Full-width red bar with white text at the bottom of the slide (the problem this slide shows)."""
+    def conclusion(self, s, d, label):
+        """Conclusion bar at the bottom plus a translucent white veil over the content under the heading.
+
+        Both fade in together on one click, unless building keyframes (then this slide is the 'after' frame).
+        """
+        text, kind = d["conclusion"], d.get("conclusion_kind", "problem")
+        if kind not in ("problem", "solution", "neutral"):
+            WARN.append(f"[{label}] unknown conclusion_kind '{kind}' — using 'problem'")
+            kind = "problem"
         x, w, y = 0.6, W - 1.2, H - 0.5 - BAR_H
+        top = self.body_top - 0.15
+        veil = self.shape(s, MSO_SHAPE.RECTANGLE, x, top, w, y - top, fill="FFFFFF")
+        veil.name = "結論遮罩"
+        clr = veil.fill._xPr.find(qn("a:solidFill")).find(qn("a:srgbClr"))
+        etree.SubElement(clr, qn("a:alpha")).set("val", str(VEIL_ALPHA * 1000))
+
         size = 20
         while size > 14 and text_w(text, size) > w - 0.6:
             size -= 1
         if text_w(text, size) > w - 0.6:
             WARN.append(f"[{label}] conclusion bar text may overflow at {size}pt — shorten it")
-        sh = self.shape(s, MSO_SHAPE.RECTANGLE, x, y, w, BAR_H, fill="problem")
-        sh.name = "結論橫條"
-        tf = sh.text_frame
+        bar = self.shape(s, MSO_SHAPE.RECTANGLE, x, y, w, BAR_H, fill=kind)
+        bar.name = "結論橫條"
+        tf = bar.text_frame
         tf.word_wrap, tf.vertical_anchor = True, MSO_ANCHOR.MIDDLE
         tf.margin_left = tf.margin_right = Inches(0.3)
         tf.margin_top = tf.margin_bottom = 0
@@ -334,7 +350,8 @@ class Deck:
         r = p.add_run()
         r.text = text
         self.style(r, size, "FFFFFF", bold=True)
-        return sh
+        if not self.keyframes:
+            fade_in_on_click(s, [veil.shape_id, bar.shape_id])
 
     def key_point(self, s, x, y, w, h, text):
         self.shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h, fill="tint", radius=0.12)
@@ -389,15 +406,14 @@ class Deck:
         if d.get("date"):
             self.textbox(s, x, H - 1.05, 4, 0.45, d["date"], size=14, color="muted", anchor=MSO_ANCHOR.MIDDLE)
 
-    def s_content(self, d, label):
+    def s_content(self, d, label, show_conclusion=True):
         dens = DENSITIES[d.get("density", self.density)]
         s = self.slide()
         self.nav(s, d.get("chapter"), d.get("section"))
         self.heading(s, d)
         x, y, w, h = self.body()
         if d.get("conclusion"):
-            h -= BAR_H + 0.15
-            self.conclusion(s, d["conclusion"], label)
+            h -= BAR_H + 0.15  # reserved on the 'before' keyframe too, so nothing jumps between frames
         key = dens["key"]
         txt = pick_text(d, key)
         figs, table = d.get("figs", []), d.get("table")
@@ -437,6 +453,8 @@ class Deck:
                     self.figures(s, vx, y, vw, h, figs, label, stack=True)
         if d.get("callout"):
             self.textbox(s, x, H - 0.45, w, 0.3, d["callout"], size=12, color="muted")
+        if d.get("conclusion") and show_conclusion:
+            self.conclusion(s, d, label)
         notes = d.get("notes") or (as_list(d.get("full")) if dens["auto_notes"] else [])
         self.notes(s, notes)
 
@@ -525,12 +543,59 @@ class Deck:
                 hint = " (divider pages were removed — delete this slide)" if t == "divider" else ""
                 WARN.append(f"[{label}] unknown slide type '{t}' — skipped{hint}")
                 continue
+            if t == "content" and d.get("conclusion") and self.keyframes:
+                fn(d, label, show_conclusion=False)  # 'before' frame
+                self.page_number(self.prs.slides[-1])
             fn(d, label)
             self.page_number(self.prs.slides[-1])
         return self.prs
 
 
 # ---------------------------------------------------------------- helpers
+P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
+
+
+def fade_in_on_click(slide, shape_ids):
+    """Add a PowerPoint timing tree: one click fades in all shape_ids together (first on click, rest with it)."""
+    def el(parent, tag, **attrs):
+        e = etree.SubElement(parent, f"{{{P_NS}}}{tag}")
+        for k, v in attrs.items():
+            e.set(k, str(v))
+        return e
+
+    ids = iter(range(1, 1000))
+    timing = el(slide._element, "timing")
+    root = el(el(el(timing, "tnLst"), "par"), "cTn", id=next(ids), dur="indefinite", restart="never",
+              nodeType="tmRoot")
+    seq = el(el(root, "childTnLst"), "seq", concurrent="1", nextAc="seek")
+    main = el(seq, "cTn", id=next(ids), dur="indefinite", nodeType="mainSeq")
+    click = el(el(el(main, "childTnLst"), "par"), "cTn", id=next(ids), fill="hold")
+    el(el(click, "stCondLst"), "cond", delay="indefinite")
+    step = el(el(el(click, "childTnLst"), "par"), "cTn", id=next(ids), fill="hold")
+    el(el(step, "stCondLst"), "cond", delay="0")
+    effects = el(step, "childTnLst")
+    for k, spid in enumerate(shape_ids):
+        eff = el(el(effects, "par"), "cTn", id=next(ids), presetID="10", presetClass="entr", presetSubtype="0",
+                 fill="hold", grpId="0", nodeType="clickEffect" if k == 0 else "withEffect")
+        el(el(eff, "stCondLst"), "cond", delay="0")
+        beh = el(eff, "childTnLst")
+        st = el(beh, "set")
+        cb = el(st, "cBhvr")
+        vis = el(cb, "cTn", id=next(ids), dur="1", fill="hold")
+        el(el(vis, "stCondLst"), "cond", delay="0")
+        el(el(cb, "tgtEl"), "spTgt", spid=spid)
+        el(el(cb, "attrNameLst"), "attrName").text = "style.visibility"
+        el(el(st, "to"), "strVal", val="visible")
+        fcb = el(el(beh, "animEffect", transition="in", filter="fade"), "cBhvr")
+        el(fcb, "cTn", id=next(ids), dur="500")
+        el(el(fcb, "tgtEl"), "spTgt", spid=spid)
+    for tag, evt in (("prevCondLst", "onPrev"), ("nextCondLst", "onNext")):
+        el(el(el(seq, tag), "cond", evt=evt, delay="0"), "tgtEl", ).append(etree.Element(f"{{{P_NS}}}sldTgt"))
+    bld = el(timing, "bldLst")
+    for spid in shape_ids:
+        el(bld, "bldP", spid=spid, grpId="0", animBg="1")
+
+
 def text_w(t, size):
     em = size / 72
     return sum(em if ord(ch) > 0x2E80 else em * 0.55 for ch in t)
@@ -574,9 +639,9 @@ def norm_fig(f):
     return {"id": f[0], "caption": f[1] if len(f) > 1 else "", "path": f[2] if len(f) > 2 else None}
 
 
-def render(spec, base, density, nav, out):
+def render(spec, base, density, nav, out, keyframes=False):
     WARN.clear()
-    prs = Deck(spec, base, density, nav).build()
+    prs = Deck(spec, base, density, nav, keyframes).build()
     prs.save(out)
     print(f"✔ {out}  ({len(prs.slides)} slides, density={density}, nav={nav})")
     for w in WARN:
@@ -590,6 +655,8 @@ def main():
     ap.add_argument("--density", choices=list(DENSITIES))
     ap.add_argument("--nav", choices=["single", "double"])
     ap.add_argument("--all-densities", action="store_true")
+    ap.add_argument("--keyframes", action="store_true",
+                    help="no animations: split each slide with a conclusion bar into before/after slides")
     a = ap.parse_args()
     spec_path = Path(a.spec)
     spec = json.loads(spec_path.read_text(encoding="utf-8"))
@@ -598,9 +665,10 @@ def main():
     out = Path(a.out or spec_path.with_suffix(".pptx"))
     if a.all_densities:
         for d in DENSITIES:
-            render(spec, spec_path.parent, d, nav, str(out.with_name(f"{out.stem}-{d}.pptx")))
+            render(spec, spec_path.parent, d, nav, str(out.with_name(f"{out.stem}-{d}.pptx")), a.keyframes)
     else:
-        render(spec, spec_path.parent, a.density or style.get("density", "balanced"), nav, str(out))
+        render(spec, spec_path.parent, a.density or style.get("density", "balanced"), nav, str(out),
+               a.keyframes)
 
 
 if __name__ == "__main__":

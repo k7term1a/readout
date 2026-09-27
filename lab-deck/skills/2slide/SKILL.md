@@ -79,6 +79,9 @@ pip show python-pptx >/dev/null 2>&1 || pip install python-pptx   # 需要時加
 python <skill-dir>/scripts/build_deck.py deck.json -o <name>.pptx
 ```
 
+結論橫條預設是「點一下出現」的動畫。使用者要匯出 PDF、上傳 Google 簡報，或說不要動畫時，加 `--keyframes`
+改成前後兩頁。
+
 每個 `⚠` 警告都要處理（縮短文字、拆頁或補圖）；只有「缺圖」可以保留，但要在回報中列出。
 轉成圖片逐頁檢查：文字溢出、導覽列反白是否正確、問題與解法是否一一對應、概念色是否前後一致。
 **有問題就修改 deck.json 後重新建置**，不要直接改 .pptx。

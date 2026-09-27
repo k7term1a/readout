@@ -68,7 +68,8 @@
   "figs":     [{"id": "Figure 1", "caption": "網格人口快照示意", "path": "figures/figure_1.png"}],
   "table":    null,
   "notes":    ["講者備註（選填）"],
-  "conclusion": "頁面底部的紅色結論橫條（選填）",
+  "conclusion": "頁面底部的結論橫條（選填）",
+  "conclusion_kind": "problem",
   "callout":  "頁底小字，例如資料來源（選填）",
   "density":  "visual",
   "text_ratio": 0.45
@@ -89,9 +90,14 @@
 | `balanced` | `short`（條列） | 文字欄約 38%，圖在右 | `notes`，沒有就自動放 `full` |
 | `visual` | `one_line` | 一句話＋滿版圖；沒有圖就變成置中大字的宣言頁 | `notes`，沒有就自動放 `full` |
 
-- `conclusion`：頁面底部的全寬紅底白字橫條，寫這一頁要點出的問題（一句話，約 30 字以內）。
-  三種密度、兩種導覽列都會顯示；內容區會自動縮短，不會和橫條重疊。文字太長時會縮小字級，縮到 14pt 仍放不下就發出警告。
-  雙排風格用它來呈現問題；這些問題最後要在「研究動機」彙整成 `mapping` 對照頁。
+- `conclusion`：頁面底部的全寬白字橫條，寫這一頁要點出的結論（一句話，約 30 字以內）。
+  - **點一下才出現**：標題以下的內容被半透明白色方框（「結論遮罩」，不透明度 70%）蓋住淡化，同時淡入橫條（「結論橫條」），
+    兩者都是 0.5 秒淡入。報告時先講內容，講完點一下再帶出結論。
+  - `conclusion_kind`：橫條顏色，`problem`（紅，預設）、`solution`（綠）、`neutral`（藍）。
+  - 三種密度、兩種導覽列都會顯示；內容區會自動縮短，不會和橫條重疊。文字太長時會縮小字級，縮到 14pt 仍放不下就發出警告。
+  - 雙排風格用它來呈現問題；這些問題最後要在「研究動機」彙整成 `mapping` 對照頁。
+  - 不能用動畫的場合（匯出 PDF、上傳 Google 簡報），建置時加 `--keyframes`：每個有結論的頁面拆成前後兩頁
+    （沒有橫條／有遮罩與橫條），內容位置完全相同，翻頁時就像動畫。
 - 缺少的欄位會依序遞補（例如沒寫 `short` 就用 `full`）。
 - `==文字==` 會變成藍色粗體強調。
 - `text_ratio`：單頁覆寫文字欄比例（0–1）。
@@ -139,6 +145,7 @@
 python scripts/build_deck.py deck.json -o out.pptx
 python scripts/build_deck.py deck.json -o out.pptx --nav double --density visual
 python scripts/build_deck.py deck.json -o out.pptx --all-densities   # 一次輸出三種密度
+python scripts/build_deck.py deck.json -o out.pptx --keyframes       # 不用動畫，結論橫條拆成前後兩頁
 ```
 
 以 `⚠` 開頭的輸出是警告，常見的有：
