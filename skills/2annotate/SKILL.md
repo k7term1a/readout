@@ -81,7 +81,9 @@ description: >
 8. 告知使用者本機後續步驟（見下方）
 ```
 
-> **檔案路徑提示**：本 skill 安裝後位於 `/mnt/skills/user/ai-paper-annotator/`，
+> **檔案路徑提示**：以下路徑都相對於本 skill 的資料夾（即本 SKILL.md 所在的資料夾；
+> 安裝位置依環境而不同，例如 claude.ai 在 `/mnt/skills/user/2annotate/`，Claude Code plugin 則在 plugin 的 `skills/2annotate/`）。
+> 輸出位置 `/mnt/user-data/outputs/` 是 claude.ai 的下載資料夾；在其他環境（例如 Claude Code）改寫到使用者目前的工作資料夾。
 > 內含：
 > - `SKILL.md`（本文件）
 > - `references/paper_schema.json`

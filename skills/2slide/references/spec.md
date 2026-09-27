@@ -21,6 +21,7 @@
   "style":    {"nav": "single", "density": "balanced", "conclusion_pos": "center"},
   "chapters": [{"name": "問題背景", "sections": ["資料限制", "既有方法"]}, "..."],
   "concepts": {"圖像層級": 1, "區域層級": 2},
+  "diagrams": {"vlm": {"direction": "right", "nodes": [], "edges": [], "modules": []}},
   "cover":    {"title": "…", "subtitle": "…", "byline": "報告人．Lab Meeting 論文報告", "date": "2026 / 10 / 02",
                "venue": "IJCAI 2018", "paper_title": "…", "authors": ["…"], "affiliations": ["…"], "presenter": "〇〇〇"},
   "theme":    {"colors": {}, "fonts": {}},
@@ -31,7 +32,9 @@
 - `style.nav`：`single`（一排章節分頁）或 `double`（章節＋子章節兩排）。指令列 `--nav` 可覆寫。
 - `style.density`：`text` / `balanced` / `visual`，整份簡報的預設密度。`--density` 可覆寫，單頁也可用 `density` 覆寫。
 - `chapters`：導覽列的分頁，順序即顯示順序。可寫字串或 `{name, sections}`；`double` 模式需要 `sections`。
-- `concepts`：概念名稱 → 概念色槽位（1–4），見第 6 節。
+- `concepts`（選用）：概念名稱 → 概念色槽位（1–4），見第 6 節。論文沒有界線明確的對照概念時不要寫。
+- `diagrams`（選用）：自己整理的架構圖，`diagram` 頁用名稱引用，見第 4 節。
+- `style.conclusion_pos`：結論橫條的預設位置，見第 3 節。
 - 封面不顯示導覽列，見下方「封面」。
 
 ### 封面
