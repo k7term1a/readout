@@ -12,16 +12,15 @@
 
 ## 簡報風格
 
-兩種導覽列 × 三種內容密度，可以任意搭配：
+![單排（左）與雙排（右）](docs/images/nav.png)
 
-- **單排**：章節本身就是故事線，頁面左上用「/ 彩色標籤」標示（紅＝問題、綠＝解法、藍＝中性），常用左文右圖。
-- **雙排**：章節用通用名稱，故事線放在子章節（子章節嵌在橘線上），頁面用黑字標題，問題以紅色結論橫條呈現。
-- **密度**：`text`（段落＋本頁重點）／`balanced`（條列＋圖）／`visual`（一句話＋滿版圖）。
+兩種導覽列（單排／雙排）× 三種密度（文字型／平衡型／圖像型），可以任意搭配。各功能的樣子與用法：
 
-另外支援：點一下出現的結論橫條、截圖標註（紅框／色塊／說明，逐一出現後回到統整畫面）、
-自己整理的原生架構圖、時間軸、漸進聚焦，以及不用動畫的 `--keyframes` 版本（方便匯出 PDF）。
+- [簡報風格：導覽列、封面、密度](docs/styles.md)
+- [強調重點：結論橫條與截圖標註](docs/emphasis.md)
+- [架構圖、漸進聚焦、時間軸](docs/diagrams.md)
 
-完整規範見 [`skills/2slide/references/style.md`](skills/2slide/references/style.md)。
+deck.json 的完整欄位見 [`spec.md`](skills/2slide/references/spec.md)，視覺規範見 [`style.md`](skills/2slide/references/style.md)。
 
 ## 安裝
 
@@ -74,6 +73,7 @@ skills/
   2annotate/             SKILL.md、scripts/generate.py、assets/style.css、references/
   both/                  SKILL.md（分派：先 2annotate、再 2slide）
 examples/                示範用的 deck.json（圖片一律使用佔位框）
+docs/                    功能說明與截圖（截圖皆來自範例與自製假圖，不含論文截圖）
 tests/                   建置測試
 ```
 
