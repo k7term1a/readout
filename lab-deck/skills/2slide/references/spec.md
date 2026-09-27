@@ -6,7 +6,7 @@
 1. 頂層欄位
 2. 導覽列與章節
 3. 內容頁（content）與三種密度
-4. 其他頁型（mapping / split / refs / divider / statement）
+4. 其他頁型（mapping / split / refs / statement）
 5. 圖片與表格
 6. 主題覆寫
 7. 建置指令與警告
@@ -33,7 +33,10 @@
 ## 2. 導覽列與章節
 
 - 每頁的 `chapter` 決定哪個分頁反白；`double` 模式下 `section` 決定第二排哪一項反白。
-- `divider` 頁（章節分隔頁）**只在 `double` 模式渲染**，`single` 模式自動略過。所以同一份 deck.json 可以直接切換兩種風格，不用改內容。
+- `double` 模式：未選分頁為灰色；子章節是嵌在橘線中間的小膠囊（目前子章節藍底、其他灰底），橘線在左右兩側斷開。
+  該章節沒有 `sections` 時，橘線不斷開。
+- `double` 模式在右下角顯示頁碼（封面除外），使用 PowerPoint 的頁碼欄位，調整頁序後會自動更新。`single` 模式沒有頁碼。
+- 沒有章節分隔頁（`divider` 頁型已移除；舊檔中的 `divider` 會被略過並發出警告）。
 - 分頁數建議 4–6 個；超過會自動縮窄。多篇論文導讀時，把每篇論文的簡稱當成一個 chapter 即可。
 
 ## 3. 內容頁（content）與三種密度
@@ -43,6 +46,7 @@
   "type": "content",
   "chapter": "問題背景", "section": "資料限制",
   "tag": "一、只有快照，沒有軌跡", "kind": "problem",
+  "title": "網格人口快照", "subtitle": "電信資料只提供各網格、各時段的人數",
   "full":     ["完整段落一。", "完整段落二。"],
   "short":    ["條列一", "條列二"],
   "one_line": "一句話重點",
@@ -55,8 +59,12 @@
 }
 ```
 
-- `tag`：左上角「/ 標籤」。`kind` 決定顏色：`problem`（紅）、`solution`（綠）、`neutral`（藍）。
+- `tag`：`single` 模式左上角的「/ 標籤」。`kind` 決定顏色：`problem`（紅）、`solution`（綠）、`neutral`（藍）。
   問題與解法請用相同編號（一、二、三）讓聽眾對得起來。
+- `title`：`double` 模式左上角的粗體黑字標題；`subtitle` 是標題下方一行灰色說明（選填）。
+  以圖為主的頁面可以省略 `title`，該頁就不放標題。
+- **`tag` 和 `title` 都寫**，同一份 deck.json 才能切換導覽列：`single` 只用 `tag`，`double` 只用 `title`。
+  `mapping`、`split`、`refs` 也一樣。
 - 三個文字欄位對應三種密度，**盡量三個都寫**，切換密度時才不用重寫：
 
 | 密度 | 使用欄位 | 版面 | 講者備註 |
@@ -86,9 +94,7 @@
 
 **refs**：參考文獻頁，每筆是 `{title, source, gist}`；`visual` 密度不顯示 `gist`。
 
-**divider**：章節分隔頁，只在 `double` 模式出現。`{"type": "divider", "chapter": "問題背景", "subtitle": "選填"}`
-
-**statement**：置中大字（例如 Q&A、一句結論）。`{"type": "statement", "text": "Q&A", "chapter": "選填"}`
+**statement**：置中大字（例如一句結論）。`{"type": "statement", "text": "…", "chapter": "選填"}`
 
 ## 5. 圖片與表格
 
@@ -99,14 +105,14 @@
 
 ## 6. 主題覆寫
 
-預設色取自實驗室簡報：主色 `1085DE`、未選分頁 `B7DAF5`、分隔線 `FF9900`、問題 `E06666`、解法 `8CD96A`。
+預設色取自實驗室簡報：主色 `1085DE`、未選分頁 `B7DAF5`（單排）／`BFBFBF`（雙排）、分隔線 `FF9900`、問題 `E06666`、解法 `8CD96A`。
 要換色只寫要改的鍵：
 
 ```json
 "theme": {"colors": {"active": "2E7D32", "rule": "F9A825"}, "fonts": {"ea": "Noto Sans TC"}}
 ```
 
-可改的顏色鍵：`active inactive rule text dark problem solution neutral muted good_bg good_fg bad_bg bad_fg tint todo`。
+可改的顏色鍵：`active inactive inactive_double rule text dark problem solution neutral muted good_bg good_fg bad_bg bad_fg tint todo`。
 
 ## 7. 建置指令與警告
 

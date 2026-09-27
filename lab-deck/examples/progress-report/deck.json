@@ -19,6 +19,7 @@
       "type": "content",
       "chapter": "問題背景",
       "tag": "一、資料解析度不足",
+      "title": "固定網格的限制",
       "kind": "problem",
       "full": [
         "現有資料以固定大小的網格為單位，無法描述不規則的實際範圍。"
@@ -39,6 +40,7 @@
       "type": "content",
       "chapter": "問題背景",
       "tag": "二、缺少移動方向",
+      "title": "快照資料看不出方向",
       "kind": "problem",
       "full": [
         "快照資料只記錄人數，看不出人從哪裡來。"
@@ -71,12 +73,15 @@
           "缺少移動方向",
           "引入外部 OD 資料"
         ]
-      ]
+      ],
+      "tag": "問題與解法對照",
+      "title": "問題與解法對照"
     },
     {
       "type": "content",
       "chapter": "概念提案",
       "tag": "一、以可達範圍重新切分",
+      "title": "以可達範圍重新切分",
       "kind": "solution",
       "full": [
         "以實際可達範圍取代固定網格，重新分配人數。"
@@ -96,6 +101,7 @@
       "type": "content",
       "chapter": "目前進度",
       "tag": "目前計算方式",
+      "title": "三種計算方式比較",
       "kind": "neutral",
       "one_line": "三種計算方式的比較",
       "figs": [
@@ -117,6 +123,7 @@
       "type": "split",
       "chapter": "後續方向",
       "tag": "應用與限制",
+      "title": "應用與限制",
       "good_title": "應用",
       "bad_title": "限制",
       "good": [

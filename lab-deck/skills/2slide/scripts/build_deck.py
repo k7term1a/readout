@@ -27,7 +27,7 @@ MARGIN = 0.9
 
 DEFAULT_THEME = {
     "colors": {
-        "active": "1085DE", "inactive": "B7DAF5", "rule": "FF9900", "text": "595959", "dark": "222222",
+        "active": "1085DE", "inactive": "B7DAF5", "inactive_double": "BFBFBF", "rule": "FF9900", "text": "595959", "dark": "222222",
         "problem": "E06666", "solution": "8CD96A", "neutral": "1085DE", "muted": "8A8A8A",
         "good_bg": "D9EAD3", "good_fg": "274E13", "bad_bg": "F4CCCC", "bad_fg": "990000",
         "tint": "EEF5FC", "ph_bg": "F3F6FA", "ph_line": "9FB3C8", "ph_text": "5A6B7D", "todo": "E69138",
@@ -62,7 +62,7 @@ class Deck:
         self.chapters = spec.get("chapters") or []
         self.prs = Presentation()
         self.prs.slide_width, self.prs.slide_height = Inches(W), Inches(H)
-        self.body_top = 1.95 if nav_style == "single" else 2.3
+        self.body_top = 1.95 if nav_style == "single" else 2.2
 
     # colours / fonts
     def rgb(self, key):
@@ -151,6 +151,7 @@ class Deck:
         if arrow:
             tail = etree.SubElement(c.line._get_or_add_ln(), qn("a:tailEnd"))
             tail.set("type", "triangle")
+        etree.SubElement(c._element.spPr, qn("a:effectLst"))  # no theme shadow
         return c
 
     # ------------------------------------------------------------ chrome
@@ -169,31 +170,67 @@ class Deck:
             tw = (W - 1.2 - gap * (len(tabs) - 1)) / len(tabs)
             total = W - 1.2
         x = (W - total) / 2
+        off = "inactive" if single else "inactive_double"
         for t in tabs:
-            self.pill(s, x, ty, tw, th, t, "active" if t == chapter else "inactive", size=size)
+            self.pill(s, x, ty, tw, th, t, "active" if t == chapter else off, size=size)
             x += tw + gap
-        rule_y = 0.98
-        if not single:
-            secs = self.sections_of(chapter)
-            if secs:
-                sy, sh, ssize = 0.74, 0.36, 13
-                widths = [text_w(t, ssize) + 0.45 for t in secs]
-                sgap = 0.12
-                x = (W - (sum(widths) + sgap * (len(secs) - 1))) / 2
-                for t, w in zip(secs, widths):
-                    cur = t == section
-                    self.pill(s, x, sy, w, sh, t, "tint" if cur else "FFFFFF", size=ssize,
-                              color="active" if cur else "muted", bold=cur)
-                    x += w + sgap
-            rule_y = 1.26
-        self.line(s, 0.6, rule_y, W - 0.6, rule_y)
-        return rule_y
+        if single:
+            self.line(s, 0.6, 0.98, W - 0.6, 0.98)
+            return
+        # double: section pills sit on the orange rule, which breaks around them
+        rule_y, left, right = 0.95, W - 0.6, 0.6
+        secs = self.sections_of(chapter)
+        if secs:
+            sh, ssize, sgap = 0.34, 13, 0.12
+            widths = [text_w(t, ssize) + 0.45 for t in secs]
+            x = left = (W - (sum(widths) + sgap * (len(secs) - 1))) / 2
+            for t, w in zip(secs, widths):
+                self.pill(s, x, rule_y - sh / 2, w, sh, t, "active" if t == section else off, size=ssize)
+                x += w + sgap
+            right = x - sgap
+            left, right = left - 0.15, right + 0.15
+        if secs:
+            self.line(s, 0.6, rule_y, left, rule_y)
+            self.line(s, right, rule_y, W - 0.6, rule_y)
+        else:
+            self.line(s, 0.6, rule_y, W - 0.6, rule_y)
 
     def sections_of(self, chapter):
         for c in self.chapters:
             if isinstance(c, dict) and c.get("name") == chapter:
                 return c.get("sections", [])
         return []
+
+    def heading(self, s, d, kind=None):
+        """single: '/ coloured tag'; double: bold black title (+ optional grey subtitle)."""
+        if self.nav_style == "single":
+            self.tag(s, d.get("tag"), kind or d.get("kind", "neutral"))
+            return
+        if d.get("title"):
+            self.textbox(s, 0.6, 1.25, W - 1.2, 0.5, d["title"], size=24, color="dark", bold=True,
+                         anchor=MSO_ANCHOR.MIDDLE)
+        if d.get("title") and d.get("subtitle"):
+            self.textbox(s, 0.6, 1.75, W - 1.2, 0.3, d["subtitle"], size=14, color="muted")
+
+    def page_number(self, s):
+        """Bottom-right slide number (double nav only). Uses a slidenum field so it follows reordering."""
+        if self.nav_style != "double":
+            return
+        tb = self.textbox(s, W - 1.1, H - 0.45, 0.7, 0.3, "", size=11, color="muted", align=PP_ALIGN.RIGHT)
+        p = tb.text_frame.paragraphs[0]._p
+        for r in p.findall(qn("a:r")):
+            p.remove(r)
+        fld = etree.SubElement(p, qn("a:fld"), id="{B6F15528-21DE-4FAA-801E-634DDDAF4B2B}", type="slidenum")
+        rpr = etree.SubElement(fld, qn("a:rPr"), lang="zh-TW", sz="1100")
+        fill = etree.SubElement(etree.SubElement(rpr, qn("a:solidFill")), qn("a:srgbClr"))
+        fill.set("val", self.C["muted"])
+        etree.SubElement(rpr, qn("a:latin"), typeface=self.F["latin"])
+        etree.SubElement(rpr, qn("a:ea"), typeface=self.F["ea"])
+        etree.SubElement(fld, qn("a:t")).text = str(len(self.prs.slides))
+        end = p.find(qn("a:endParaRPr"))
+        if end is not None:
+            p.remove(end)
+            p.append(end)
 
     def tag(self, s, text, kind):
         if not text:
@@ -300,26 +337,11 @@ class Deck:
                 y += 0.55
         self.notes(s, d.get("notes"))
 
-    def s_divider(self, d):
-        s = self.slide()
-        self.nav(s, d["chapter"])
-        secs = self.sections_of(d["chapter"])
-        self.textbox(s, MARGIN, 2.3, 5.2, 1.2, d["chapter"], size=40, color="active", bold=True,
-                     anchor=MSO_ANCHOR.BOTTOM)
-        if d.get("subtitle"):
-            self.textbox(s, MARGIN, 3.55, 5.2, 0.5, d["subtitle"], size=16, color="muted")
-        top = max(self.body_top, 3.2 - len(secs) * 0.4)
-        for k, t in enumerate(secs):
-            y = top + k * 0.8
-            self.pill(s, 6.8, y, 0.55, 0.55, str(k + 1), "inactive", size=16)
-            self.textbox(s, 7.6, y, 4.8, 0.55, t, size=20, color="dark", anchor=MSO_ANCHOR.MIDDLE)
-        self.notes(s, d.get("notes"))
-
     def s_content(self, d, label):
         dens = DENSITIES[d.get("density", self.density)]
         s = self.slide()
         self.nav(s, d.get("chapter"), d.get("section"))
-        self.tag(s, d.get("tag"), d.get("kind", "neutral"))
+        self.heading(s, d)
         x, y, w, h = self.body()
         key = dens["key"]
         txt = pick_text(d, key)
@@ -366,7 +388,7 @@ class Deck:
     def s_mapping(self, d, label):
         s = self.slide()
         self.nav(s, d.get("chapter"), d.get("section"))
-        self.tag(s, d.get("tag"), "neutral")
+        self.heading(s, d, "neutral")
         pairs = d["pairs"]
         pw, ph = 3.6, 0.62
         lx, rx = 2.1, W - 2.1 - pw
@@ -384,7 +406,7 @@ class Deck:
         dens = DENSITIES[d.get("density", self.density)]
         s = self.slide()
         self.nav(s, d.get("chapter"), d.get("section"))
-        self.tag(s, d.get("tag"), "neutral")
+        self.heading(s, d, "neutral")
         x, y, w, _ = self.body()
         brief = dens["key"] == "one_line"
         h = 3.4 if brief else 3.9
@@ -414,6 +436,7 @@ class Deck:
         brief = DENSITIES[d.get("density", self.density)]["key"] == "one_line"
         s = self.slide()
         self.nav(s, d.get("chapter"), d.get("section"))
+        self.heading(s, d, "neutral")
         paras = []
         for r in d["refs"]:
             r = r if isinstance(r, dict) else {"title": r[0], "source": r[1] if len(r) > 1 else "",
@@ -424,7 +447,7 @@ class Deck:
             if r.get("gist") and not brief:
                 paras.append({"t": f"    {r['gist']}", "size": 14, "color": "text", "space": 3})
             paras.append({"t": " ", "size": 8, "space": 3})
-        top = self.body_top - 0.45
+        top = self.body_top if d.get("title" if self.nav_style == "double" else "tag") else self.body_top - 0.45
         self.textbox(s, 1.2, top, W - 2.4, H - top - 0.4, paras, latin=self.F["ref_latin"], size=17,
                      min_size=11, label=label)
         self.notes(s, d.get("notes"))
@@ -442,15 +465,13 @@ class Deck:
         for i, d in enumerate(self.spec.get("slides", []), start=2):
             t = d.get("type", "content")
             label = f"slide {i} {d.get('tag') or t}"
-            if t == "divider":
-                if self.nav_style == "double":
-                    self.s_divider(d)
-                continue
-            fn = getattr(self, f"s_{t}", None)
+            fn = getattr(self, f"s_{t}", None) if t != "cover" else None
             if fn is None:
-                WARN.append(f"[{label}] unknown slide type '{t}' — skipped")
+                hint = " (divider pages were removed — delete this slide)" if t == "divider" else ""
+                WARN.append(f"[{label}] unknown slide type '{t}' — skipped{hint}")
                 continue
             fn(d, label)
+            self.page_number(self.prs.slides[-1])
         return self.prs
 
 
