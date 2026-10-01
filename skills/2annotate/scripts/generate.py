@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AI Paper Annotator — HTML Generator
+AI 論文導讀器（2annotate）— HTML Generator
 Usage:  python generate.py paper.json [--out output.html]
 
 Expected folder layout (next to paper.json):
@@ -332,8 +332,8 @@ def render_en(content) -> str:
 def render_annotation(ann: dict, role_colour: str) -> str:
     return f"""<div class="ann-card" style="border-left-color:{role_colour}">
       <span class="ann-role" style="background:{role_colour}">{e(ann.get("role",""))}</span>
-      <div class="ann-section"><div class="ann-label">技術邏輯</div><div>{e(ann.get("logic",""))}</div></div>
-      <div class="ann-section"><div class="ann-label">閱讀提示</div><div>{e(ann.get("note",""))}</div></div>
+      <div class="ann-section"><div class="ann-label">這段在說什麼</div><div>{e(ann.get("logic",""))}</div></div>
+      <div class="ann-section"><div class="ann-label">背景補充</div><div>{e(ann.get("note",""))}</div></div>
     </div>"""
 
 # ── Figure ─────────────────────────────────────────────────────────────────────
@@ -352,7 +352,8 @@ def render_figure(block: dict, base_dir: Path) -> tuple[str, str]:
             break
 
     img_html = (
-        f'<img src="{img_src}" alt="{e(fid)}" class="fig-img fig-img--{aspect}">'
+        f'<img src="{img_src}" alt="{e(fid)}" class="fig-img fig-img--{aspect} zoomable" '
+        f'data-caption="{e(block.get("caption_zh") or block.get("caption_en", ""))}" title="點一下放大">'
         if img_src else
         f'<div class="fig-placeholder">[ 請將 {e(fid)}.png / .jpg 放於 figures/ 資料夾 ]</div>'
     )
@@ -369,9 +370,9 @@ def render_figure(block: dict, base_dir: Path) -> tuple[str, str]:
 
     data_flow = ann.get("data_flow", "")
     right = f"""<div class="ann-card ann-card--figure">
-      <span class="ann-role" style="background:#64748b">圖表批註</span>
-      <div class="ann-section"><div class="ann-label">論點</div><div>{e(ann.get("argument",""))}</div></div>
-      <div class="ann-section"><div class="ann-label">閱讀視覺重點</div><div>{e(ann.get("reading_tip",""))}</div></div>
+      <span class="ann-role" style="background:#64748b">圖表說明</span>
+      <div class="ann-section"><div class="ann-label">這張圖在說什麼</div><div>{e(ann.get("argument",""))}</div></div>
+      <div class="ann-section"><div class="ann-label">怎麼看</div><div>{e(ann.get("reading_tip",""))}</div></div>
       {"" if not data_flow else f'<div class="ann-section"><div class="ann-label">資料流向</div><div>{e(data_flow)}</div></div>'}
     </div>"""
 
@@ -416,9 +417,9 @@ def render_table_html(tbl: dict, referenced_rows: set) -> str:
 def render_table_ann(tbl: dict) -> str:
     ann = tbl.get("annotation", {})
     return f"""<div class="ann-card ann-card--table">
-      <span class="ann-role" style="background:#0f766e">表格批註</span>
-      <div class="ann-section"><div class="ann-label">論點</div><div>{e(ann.get("argument",""))}</div></div>
-      <div class="ann-section"><div class="ann-label">閱讀重點</div><div>{e(ann.get("reading_tip",""))}</div></div>
+      <span class="ann-role" style="background:#0f766e">表格說明</span>
+      <div class="ann-section"><div class="ann-label">這張表在說什麼</div><div>{e(ann.get("argument",""))}</div></div>
+      <div class="ann-section"><div class="ann-label">怎麼看</div><div>{e(ann.get("reading_tip",""))}</div></div>
     </div>"""
 
 def render_table_ref_snippet(blk: dict, tbl: dict | None) -> str:
@@ -596,6 +597,39 @@ def build_fishbone(fb: dict) -> str:
     return "\n".join(p)
 
 # ── Main HTML builder ──────────────────────────────────────────────────────────
+
+# ── Lightbox (click a figure to enlarge) ───────────────────────────────────────
+# Inlined in the page rather than style.css, so it works even with an older style.css next to the HTML.
+
+LIGHTBOX_CSS = """
+.zoomable { cursor: zoom-in; }
+.lightbox { position: fixed; inset: 0; z-index: 1000; background: rgba(15, 23, 42, 0.85);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 3vh 3vw; cursor: zoom-out; }
+.lightbox[hidden] { display: none; }
+.lightbox img { max-width: 94vw; max-height: 86vh; object-fit: contain; background: #fff;
+                border-radius: 4px; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
+.lightbox-cap { margin-top: 12px; max-width: 90vw; color: #e2e8f0; font-size: 14px; text-align: center; }
+"""
+
+LIGHTBOX_JS = """
+(function () {
+  var box = document.getElementById('lightbox');
+  var img = document.getElementById('lightbox-img');
+  var cap = document.getElementById('lightbox-cap');
+  function close() { box.hidden = true; img.removeAttribute('src'); document.body.style.overflow = ''; }
+  document.querySelectorAll('img.zoomable').forEach(function (el) {
+    el.addEventListener('click', function () {
+      img.src = el.src; img.alt = el.alt;
+      cap.textContent = el.getAttribute('data-caption') || '';
+      box.hidden = false; document.body.style.overflow = 'hidden';
+    });
+  });
+  box.addEventListener('click', close);
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && !box.hidden) close(); });
+})();
+"""
+
 
 def build_html(data: dict, base_dir: Path) -> str:
     meta     = data["meta"]
@@ -816,15 +850,21 @@ def build_html(data: dict, base_dir: Path) -> str:
   </section>
 </main>
 
+<div id="lightbox" class="lightbox" hidden>
+  <img id="lightbox-img" alt="">
+  <div id="lightbox-cap" class="lightbox-cap"></div>
+</div>
+<style>{LIGHTBOX_CSS}</style>
 <script>{SCROLL_JS}</script>
 <script>{EVO_HOVER_JS}</script>
+<script>{LIGHTBOX_JS}</script>
 </body>
 </html>"""
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="AI Paper Annotator — JSON → HTML")
+    parser = argparse.ArgumentParser(description="AI 論文導讀器 — JSON → HTML")
     parser.add_argument("json_file")
     parser.add_argument("--out", default="")
     args = parser.parse_args()

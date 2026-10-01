@@ -46,8 +46,8 @@
               "type": "string",
               "enum": ["問題定義","研究動機","文獻回顧","方法提出","模型元件描述","實作細節","實驗設計","結果分析","消融實驗","侷限討論","結論"]
             },
-            "logic": { "type": "string" },
-            "note":  { "type": "string" }
+            "logic": { "type": "string", "description": "畫面標籤「這段在說什麼」：用白話重述這段的主張，優先舉具體例子；不評論作者的寫作策略" },
+            "note":  { "type": "string", "description": "畫面標籤「背景補充」：讀懂這段需要的知識（術語、前人模型、公式在算什麼）與前後文關係；除非 role 是「侷限討論」，不得評論論文" }
           }
         }
       }
@@ -74,8 +74,8 @@
           "type": "object",
           "required": ["argument", "reading_tip"],
           "properties": {
-            "argument":    { "type": "string" },
-            "reading_tip": { "type": "string" },
+            "argument":    { "type": "string", "description": "畫面標籤「這張圖在說什麼」：這張圖要表達的事，站在論文的立場重述" },
+            "reading_tip": { "type": "string", "description": "畫面標籤「怎麼看」：先看哪裡、座標軸／顏色／符號代表什麼、要注意的趨勢" },
             "data_flow":   { "type": "string", "description": "僅限架構圖，描述資料流向" }
           }
         }
