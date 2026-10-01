@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "readout"
-version = "0.3.0"
+version = "0.3.1"
 description = "Paper -> annotated reading page + editable lab-meeting slides (deck.json -> .pptx)"
 requires-python = ">=3.9"
 dependencies = ["python-pptx>=1.0", "Pillow>=9", "lxml"]
